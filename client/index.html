@@ -129,6 +129,14 @@
             document.getElementById('status').innerText = 'Подключено';
         });
 
+        socket.on('player-connected', (playerData) => {
+            if (playerData.id !== mySocketId) {
+                console.log('[CLIENT] Новый игрок:', playerData.id);
+                const newPlayer = new SimplePlayer(playerData.id, playerData.x, playerData.z, 0x883333);
+                players.set(playerData.id, newPlayer);
+            }
+        });
+
         socket.on('current-players', (playersData) => {
             console.log('[CLIENT] Получены текущие игроки:', playersData);
             playersData.forEach(p => {
@@ -151,6 +159,71 @@
                 document.getElementById('status').innerText = 'В игре';
             }
         }, 500);
+
+        const keyState = {
+            w: false,
+            s: false,
+            a: false,
+            d: false
+        };
+
+        let moveInterval = null;
+        const MOVE_SPEED = 5;
+        const BOUNDS = 9;
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keyState.w = true;
+            if (key === 's') keyState.s = true;
+            if (key === 'a') keyState.a = true;
+            if (key === 'd') keyState.d = true;
+            
+            if (!moveInterval) {
+                startMoving();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keyState.w = false;
+            if (key === 's') keyState.s = false;
+            if (key === 'a') keyState.a = false;
+            if (key === 'd') keyState.d = false;
+            
+            // Если ни одна клавиша не нажата — останавливаем интервал
+            if (!keyState.w && !keyState.s && !keyState.a && !keyState.d) {
+                if (moveInterval) {
+                    clearInterval(moveInterval);
+                    moveInterval = null;
+                }
+            }
+        });
+
+        function startMoving() {
+            if (moveInterval) return;
+            
+            let lastTime = performance.now();
+            
+            moveInterval = setInterval(() => {
+                if (!myPlayer) return;
+                
+                const now = performance.now();
+                let delta = Math.min(0.033, (now - lastTime) / 1000);
+                lastTime = now;
+                
+                let dx = 0, dz = 0;
+                if (keyState.w) dz -= MOVE_SPEED * delta;
+                if (keyState.s) dz += MOVE_SPEED * delta;
+                if (keyState.a) dx -= MOVE_SPEED * delta;
+                if (keyState.d) dx += MOVE_SPEED * delta;
+                
+                if (dx !== 0 || dz !== 0) {
+                    const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + dx));
+                    const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + dz));
+                    myPlayer.setPosition(newX, newZ);
+                }
+            }, 1000 / 30);
+        }
 
         // --- АНИМАЦИЯ КАМЕРЫ ---
         function animate() {
@@ -175,6 +248,8 @@
             
             renderer.render(scene, camera);
         }
+
+
         animate();
 
         window.addEventListener('resize', () => {
