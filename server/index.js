@@ -11,11 +11,11 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, '../client')));
 
+// Хранилище игроков в памяти
 const players = new Map();
 
 io.on('connection', (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
-
   players.set(socket.id, {
     id: socket.id,
     x: 0,
@@ -25,6 +25,9 @@ io.on('connection', (socket) => {
   });
 
   console.log(`[SERVER] Total players: ${players.size}`);
+
+  // ОТПРАВЛЯЕМ НОВОМУ ИГРОКУ СПИСОК ВСЕХ СУЩЕСТВУЮЩИХ
+  socket.emit('current-players', Array.from(players.values()));
 
   socket.on('disconnect', () => {
     console.log(`[SERVER] Player disconnected: ${socket.id}`);

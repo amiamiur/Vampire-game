@@ -129,6 +129,16 @@
             document.getElementById('status').innerText = 'Подключено';
         });
 
+        socket.on('current-players', (playersData) => {
+            console.log('[CLIENT] Получены текущие игроки:', playersData);
+            playersData.forEach(p => {
+                if (p.id !== mySocketId) {
+                    const newPlayer = new SimplePlayer(p.id, p.x, p.z, 0x883333);
+                    players.set(p.id, newPlayer);
+                }
+            });
+        });
+
         socket.on('disconnect', () => {
             console.log('[CLIENT] Disconnected');
             document.getElementById('status').innerText = 'Отключено';
