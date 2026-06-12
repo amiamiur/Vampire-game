@@ -35,80 +35,145 @@
 
     <script type="module">
         import * as THREE from 'three';
+        import { io } from 'https://cdn.socket.io/4.6.1/socket.io.esm.min.js';
 
+        // --- ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a2a); // тёмно-синий, почти ночной
-        
+        scene.background = new THREE.Color(0x0a0a2a);
+        scene.fog = new THREE.FogExp2(0x0a0a2a, 0.03); // туман для мрачности
+
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 5, 5);
+        camera.position.set(8, 6, 8);
         camera.lookAt(0, 0, 0);
-        
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
-        
-        const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-        const material = new THREE.MeshStandardMaterial({ color: 0xaa3333 });
-        const cube = new THREE.Mesh(geometry, material);
-        cube.castShadow = true;
-        scene.add(cube);
 
-        const ambientLight = new THREE.AmbientLight(0x404040);
+        // --- ОСВЕЩЕНИЕ ---
+        const ambientLight = new THREE.AmbientLight(0x331133);
         scene.add(ambientLight);
-        
-         const gridHelper = new THREE.GridHelper(20, 20, 0xaa5555, 0x442222);
+
+        const dirLight = new THREE.DirectionalLight(0xccaa88, 1);
+        dirLight.position.set(5, 10, 3);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.PointLight(0x552222, 0.5);
+        fillLight.position.set(0, 2, 0);
+        scene.add(fillLight);
+
+        // --- ПОЛ ---
+        const gridHelper = new THREE.GridHelper(22, 20, 0xaa5555, 0x442222);
         gridHelper.position.y = -0.5;
         scene.add(gridHelper);
-        
-        // Полупрозрачная плоскость под ногами
+
         const groundPlane = new THREE.Mesh(
-            new THREE.PlaneGeometry(18, 18),
-            new THREE.MeshStandardMaterial({ color: 0x1a0a0a, roughness: 0.7, metalness: 0.1 })
+            new THREE.PlaneGeometry(20, 20),
+            new THREE.MeshStandardMaterial({ color: 0x1a0a0a, roughness: 0.8 })
         );
         groundPlane.rotation.x = -Math.PI / 2;
         groundPlane.position.y = -0.6;
         groundPlane.receiveShadow = true;
         scene.add(groundPlane);
-        
-        // --- УЛУЧШЕННОЕ ОСВЕЩЕНИЕ ---
-        // Задний тёплый свет
-        const backLight = new THREE.PointLight(0x553333, 0.5);
-        backLight.position.set(-3, 2, -4);
-        scene.add(backLight);
-        
-        // Красноватый fill свет снизу (эффект вампирской ауры)
-        const fillRed = new THREE.PointLight(0x441111, 0.3);
-        fillRed.position.set(0, -1, 0);
-        scene.add(fillRed);
-        
-        // Маленькие точечные свечи по углам (декоративные)
-        const candlePositions = [
-            [-7, -0.3, -7], [7, -0.3, -7], [-7, -0.3, 7], [7, -0.3, 7]
-        ];
+
+        // Декоративные свечи
+        const candlePositions = [[-7, -0.3, -7], [7, -0.3, -7], [-7, -0.3, 7], [7, -0.3, 7], [0, -0.3, -8], [0, -0.3, 8]];
         candlePositions.forEach(pos => {
-            const candleLight = new THREE.PointLight(0xff6633, 0.4, 8);
+            const candleLight = new THREE.PointLight(0xff6633, 0.5, 10);
             candleLight.position.set(pos[0], pos[1], pos[2]);
             scene.add(candleLight);
+            
+            // Маленькая "свечка" (кубик)
+            const candleGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.4, 6);
+            const candleMat = new THREE.MeshStandardMaterial({ color: 0xccaa88 });
+            const candleMesh = new THREE.Mesh(candleGeo, candleMat);
+            candleMesh.position.set(pos[0], pos[1] + 0.2, pos[2]);
+            candleMesh.castShadow = true;
+            scene.add(candleMesh);
         });
-        
-        // Анимация куба (лёгкое вращение, чтобы было видно что 3D работает)
+
+        // --- КЛАСС ИГРОКА (КУБ С ЦВЕТОМ) ---
+        class SimplePlayer {
+            constructor(id, x, z, color = 0xaa3333) {
+                this.id = id;
+                const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const material = new THREE.MeshStandardMaterial({ color: color, emissive: 0x220000 });
+                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh.castShadow = true;
+                this.mesh.position.set(x, 0, z);
+                scene.add(this.mesh);
+            }
+            
+            setPosition(x, z) {
+                this.mesh.position.set(x, 0, z);
+            }
+            
+            remove() {
+                scene.remove(this.mesh);
+            }
+        }
+
+        // --- ИГРОВЫЕ ОБЪЕКТЫ ---
+        const players = new Map(); // socket.id -> SimplePlayer
+        let mySocketId = null;
+        let myPlayer = null;
+
+        // --- ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ---
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('[CLIENT] Connected to server');
+            mySocketId = socket.id;
+            document.getElementById('status').innerText = 'Подключено';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('[CLIENT] Disconnected');
+            document.getElementById('status').innerText = 'Отключено';
+        });
+
+        // Создаём своего игрока после получения ID
+        setTimeout(() => {
+            if (mySocketId && !myPlayer) {
+                myPlayer = new SimplePlayer(mySocketId, 0, 0, 0xcc4444);
+                document.getElementById('status').innerText = 'В игре';
+            }
+        }, 500);
+
+        // --- АНИМАЦИЯ КАМЕРЫ ---
         function animate() {
             requestAnimationFrame(animate);
-            cube.rotation.y += 0.01;
-            cube.rotation.x += 0.005;
+            
+            // Камера следует за игроком
+            if (myPlayer) {
+                const targetX = myPlayer.mesh.position.x;
+                const targetZ = myPlayer.mesh.position.z;
+                camera.position.x += (targetX - camera.position.x) * 0.05;
+                camera.position.z += (targetZ - camera.position.z) * 0.05;
+                camera.lookAt(targetX, 0, targetZ);
+            }
+            
+            // Мерцание свечей
+            let time = Date.now() * 0.003;
+            scene.children.forEach(child => {
+                if (child instanceof THREE.PointLight && child.intensity < 1.0) {
+                    child.intensity = 0.4 + Math.sin(time + child.position.x) * 0.2;
+                }
+            });
+            
             renderer.render(scene, camera);
         }
         animate();
-        
-        document.getElementById('status').innerText = '3D сцена загружена';
-        console.log('Three.js сцена запущена');
-        
-        window.addEventListener('resize', onWindowResize, false);
-        function onWindowResize() {
+
+        window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+        });
+
+        console.log('[CLIENT] Bloodline Duel клиент запущен');
     </script>
 </body>
 </html>
