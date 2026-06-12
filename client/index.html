@@ -116,7 +116,7 @@
         }
 
         // --- ИГРОВЫЕ ОБЪЕКТЫ ---
-        const players = new Map(); // socket.id -> SimplePlayer
+        const players = new Map();
         let mySocketId = null;
         let myPlayer = null;
 
@@ -137,6 +137,14 @@
             }
         });
 
+        socket.on('player-moved', (data) => {
+
+            const player = players.get(data.id);
+            if (player) {
+                player.setPosition(data.x, data.z);
+            }
+        });
+
         socket.on('current-players', (playersData) => {
             console.log('[CLIENT] Получены текущие игроки:', playersData);
             playersData.forEach(p => {
@@ -147,9 +155,13 @@
             });
         });
 
-        socket.on('disconnect', () => {
-            console.log('[CLIENT] Disconnected');
-            document.getElementById('status').innerText = 'Отключено';
+        socket.on('player-disconnected', (id) => {
+            console.log('[CLIENT] Игрок отключился:', id);
+            const player = players.get(id);
+            if (player) {
+                player.remove();
+                players.delete(id);
+            }
         });
 
         // Создаём своего игрока после получения ID
@@ -221,7 +233,7 @@
                     const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + dx));
                     const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + dz));
                     myPlayer.setPosition(newX, newZ);
-
+                    
                     socket.emit('player-move', { x: newX, z: newZ });
                 }
             }, 1000 / 30);

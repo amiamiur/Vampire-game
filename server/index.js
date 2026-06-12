@@ -16,6 +16,8 @@ const players = new Map();
 
 io.on('connection', (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
+  
+  // Добавляем игрока
   players.set(socket.id, {
     id: socket.id,
     x: 0,
@@ -24,24 +26,38 @@ io.on('connection', (socket) => {
     bloodEssence: 0
   });
 
-  socket.broadcast.emit('player-connected', players.get(socket.id));
-
   console.log(`[SERVER] Total players: ${players.size}`);
 
-  // ОТПРАВЛЯЕМ НОВОМУ ИГРОКУ СПИСОК ВСЕХ СУЩЕСТВУЮЩИХ
+  // Оповещаем всех остальных о новом игроке
+  socket.broadcast.emit('player-connected', players.get(socket.id));
+
+  // Отправляем новому игроку список всех существующих
   socket.emit('current-players', Array.from(players.values()));
 
+  // Обработка движения
   socket.on('player-move', (data) => {
     const player = players.get(socket.id);
     if (player) {
       player.x = data.x;
       player.z = data.z;
+
+
+      socket.broadcast.emit('player-moved', {
+        id: socket.id,
+        x: data.x,
+        z: data.z
+      });
     }
   });
 
+  // Обработка отключения
   socket.on('disconnect', () => {
     console.log(`[SERVER] Player disconnected: ${socket.id}`);
     players.delete(socket.id);
+    
+    // Сообщаем всем, что игрок отключился
+    io.emit('player-disconnected', socket.id);
+    
     console.log(`[SERVER] Total players: ${players.size}`);
   });
 });
