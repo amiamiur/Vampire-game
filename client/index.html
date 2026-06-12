@@ -232,18 +232,34 @@
                 const now = performance.now();
                 let delta = Math.min(0.033, (now - lastTime) / 1000);
                 lastTime = now;
-                
-                let dx = 0, dz = 0;
-                if (keyState.w) dz -= MOVE_SPEED * delta;
-                if (keyState.s) dz += MOVE_SPEED * delta;
-                if (keyState.a) dx -= MOVE_SPEED * delta;
-                if (keyState.d) dx += MOVE_SPEED * delta;
-                
-                if (dx !== 0 || dz !== 0) {
-                    const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + dx));
-                    const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + dz));
-                    myPlayer.setPosition(newX, newZ);
 
+                const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+                const cameraRight = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
+                
+                let moveDirection = new THREE.Vector3(0, 0, 0);
+                
+                if (keyState.w) moveDirection.z += 1;
+                if (keyState.s) moveDirection.z -= 1;
+                if (keyState.a) moveDirection.x -= 1;
+                if (keyState.d) moveDirection.x += 1;
+                
+                // Нормализуем для диагонального движения (чтобы не было быстрее)
+                if (moveDirection.length() > 0) {
+                    moveDirection.normalize();
+                }
+                
+                // Преобразуем в мировые координаты
+                const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+                const right = new THREE.Vector3(cameraRight.x, 0, cameraRight.z).normalize();
+                
+                const deltaX = (moveDirection.x * right.x + moveDirection.z * forward.x) * MOVE_SPEED * delta;
+                const deltaZ = (moveDirection.x * right.z + moveDirection.z * forward.z) * MOVE_SPEED * delta;
+                
+                if (deltaX !== 0 || deltaZ !== 0) {
+                    const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + deltaX));
+                    const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + deltaZ));
+                    myPlayer.setPosition(newX, newZ);
+                    
                     socket.emit('player-move', { x: newX, z: newZ });
                 }
             }, 1000 / 30);
@@ -253,7 +269,6 @@
         function animate() {
             requestAnimationFrame(animate);
             
-            // Обновляем цель OrbitControls — следим за позицией игрока
             if (myPlayer) {
                 controls.target.set(
                     myPlayer.mesh.position.x,
@@ -262,7 +277,6 @@
                 );
             }
             
-            // Обновляем controls (нужно для плавности и применения damping)
             controls.update();
             
             // Мерцание свечей
