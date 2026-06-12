@@ -221,6 +221,8 @@
                     const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + dx));
                     const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + dz));
                     myPlayer.setPosition(newX, newZ);
+
+                    socket.emit('player-move', { x: newX, z: newZ });
                 }
             }, 1000 / 30);
         }

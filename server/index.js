@@ -24,10 +24,20 @@ io.on('connection', (socket) => {
     bloodEssence: 0
   });
 
+  socket.broadcast.emit('player-connected', players.get(socket.id));
+
   console.log(`[SERVER] Total players: ${players.size}`);
 
   // ОТПРАВЛЯЕМ НОВОМУ ИГРОКУ СПИСОК ВСЕХ СУЩЕСТВУЮЩИХ
   socket.emit('current-players', Array.from(players.values()));
+
+  socket.on('player-move', (data) => {
+    const player = players.get(socket.id);
+    if (player) {
+      player.x = data.x;
+      player.z = data.z;
+    }
+  });
 
   socket.on('disconnect', () => {
     console.log(`[SERVER] Player disconnected: ${socket.id}`);
