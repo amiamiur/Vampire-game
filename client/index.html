@@ -28,7 +28,8 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
             }
         }
     </script>
@@ -36,20 +37,29 @@
     <script type="module">
         import * as THREE from 'three';
         import { io } from 'https://cdn.socket.io/4.6.1/socket.io.esm.min.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         // --- ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0a0a2a);
         scene.fog = new THREE.FogExp2(0x0a0a2a, 0.03); // туман для мрачности
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(8, 6, 8);
-        camera.lookAt(0, 0, 0);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(10, 8, 12);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.zoomSpeed = 1.2;
+        controls.rotateSpeed = 1.0;
+        controls.enableZoom = true;
+        controls.zoomSpeed = 1.0;
+        controls.target.set(0, 1, 0);
 
         // --- ОСВЕЩЕНИЕ ---
         const ambientLight = new THREE.AmbientLight(0x331133);
@@ -233,7 +243,7 @@
                     const newX = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.x + dx));
                     const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, myPlayer.mesh.position.z + dz));
                     myPlayer.setPosition(newX, newZ);
-                    
+
                     socket.emit('player-move', { x: newX, z: newZ });
                 }
             }, 1000 / 30);
@@ -243,14 +253,17 @@
         function animate() {
             requestAnimationFrame(animate);
             
-            // Камера следует за игроком
+            // Обновляем цель OrbitControls — следим за позицией игрока
             if (myPlayer) {
-                const targetX = myPlayer.mesh.position.x;
-                const targetZ = myPlayer.mesh.position.z;
-                camera.position.x += (targetX - camera.position.x) * 0.05;
-                camera.position.z += (targetZ - camera.position.z) * 0.05;
-                camera.lookAt(targetX, 0, targetZ);
+                controls.target.set(
+                    myPlayer.mesh.position.x,
+                    myPlayer.mesh.position.y + 0.5,  // чуть выше центра куба
+                    myPlayer.mesh.position.z
+                );
             }
+            
+            // Обновляем controls (нужно для плавности и применения damping)
+            controls.update();
             
             // Мерцание свечей
             let time = Date.now() * 0.003;
@@ -262,7 +275,6 @@
             
             renderer.render(scene, camera);
         }
-
 
         animate();
 
