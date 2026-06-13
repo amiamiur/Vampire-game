@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blood Duel</title>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { 
+        margin: 0; 
+        overflow: hidden; 
+        transition: background-color 0.1s;
+        }
         #info {
             position: absolute;
             top: 20px;
@@ -18,11 +22,25 @@
             pointer-events: none;
             z-index: 10;
         }
+        @keyframes bloodFlash {
+            0% { background-color: rgba(255,0,0,0); }
+            50% { background-color: rgba(255,0,0,0.5); }
+            100% { background-color: rgba(255,0,0,0); }
+        }
     </style>
 </head>
 <body>
     <div id="info">
         BLOODLINE DUEL | <span id="status">Загрузка...</span>
+    </div>
+    <div id="health-bar-container" style="position: absolute; top: 80px; left: 20px; width: 200px; height: 20px; background: #330000; border: 2px solid #aa0000; border-radius: 5px; z-index: 10;">
+        <div id="health-bar" style="width: 100%; height: 100%; background: #aa0000; transition: width 0.3s;"></div>
+    </div>
+    <div id="essence-display" style="position: absolute; top: 120px; left: 20px; color: #ff4444; font-family: monospace; font-size: 16px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px; z-index: 10;">
+        Кровавая сущность: <span id="essence-value">0</span>
+    </div>
+    <div id="controls-hint" style="position: absolute; bottom: 20px; left: 20px; color: #888; background: rgba(0,0,0,0.5); padding: 5px 10px; font-family: monospace; font-size: 12px; z-index: 10;">
+        WASD — движение | ЛКМ по другому игроку — укус (вампиризм)
     </div>
 
     <script type="importmap">
@@ -42,7 +60,7 @@
         // --- ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0a0a2a);
-        scene.fog = new THREE.FogExp2(0x0a0a2a, 0.03); // туман для мрачности
+        scene.fog = new THREE.FogExp2(0x0a0a2a, 0.03);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(10, 8, 12);
@@ -130,8 +148,18 @@
         let mySocketId = null;
         let myPlayer = null;
 
-        // --- ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ---
         const socket = io();
+        const healthBar = document.getElementById('health-bar');
+        const healthValue = document.getElementById('health-value');
+        const essenceValueSpan = document.getElementById('essence-value');
+        let myHp = 100;
+        let myEssence = 0;
+
+        function updateUI() {
+            const percent = (myHp / 100) * 100;
+            healthBar.style.width = `${percent}%`;
+            essenceValueSpan.innerText = myEssence;
+        }
 
         socket.on('connect', () => {
             console.log('[CLIENT] Connected to server');
@@ -171,6 +199,68 @@
             if (player) {
                 player.remove();
                 players.delete(id);
+            }
+        });
+
+        socket.on('player-hurt', (data) => {
+            if (data.id === mySocketId) {
+                myHp = data.hp;
+                updateUI();
+                
+                // Эффект получения урона
+                document.body.style.animation = 'none';
+                setTimeout(() => {
+                    document.body.style.animation = 'bloodFlash 0.3s ease-out';
+                }, 10);
+                
+                if (myHp <= 0) {
+                    document.getElementById('status').innerText = 'Мёртв...';
+                }
+            } else {
+                const hurtPlayer = players.get(data.id);
+                if (hurtPlayer) {
+                    // Визуальный эффект для других игроков
+                    hurtPlayer.mesh.material.emissiveIntensity = 0.8;
+                    setTimeout(() => {
+                        if (hurtPlayer.mesh) hurtPlayer.mesh.material.emissiveIntensity = 0.1;
+                    }, 200);
+                }
+            }
+        });
+
+        socket.on('essence-update', (data) => {
+            if (data.id === mySocketId) {
+                myEssence = data.essence;
+                updateUI();
+            }
+        });
+
+        socket.on('player-died', (id) => {
+            if (id === mySocketId) {
+                console.log('[CLIENT] Вы погибли! Возрождение через 2 секунды...');
+                document.getElementById('status').innerText = 'Погиб... возрождение...';
+            } else {
+                const deadPlayer = players.get(id);
+                if (deadPlayer) {
+                    deadPlayer.mesh.material.color.setHex(0x331111);
+                }
+            }
+        });
+
+        socket.on('player-respawn', (data) => {
+            if (data.id === mySocketId) {
+                myHp = data.hp;
+                myEssence = data.essence;
+                myPlayer.setPosition(data.x, data.z);
+                updateUI();
+                document.getElementById('status').innerText = 'В игре';
+            } else {
+                const respawned = players.get(data.id);
+                if (respawned) {
+                    respawned.setPosition(data.x, data.z);
+                    respawned.mesh.material.color.setHex(0x883333);
+                    respawned.mesh.material.emissiveIntensity = 0.1;
+                }
             }
         });
 
@@ -243,7 +333,6 @@
                 if (keyState.a) moveDirection.x -= 1;
                 if (keyState.d) moveDirection.x += 1;
                 
-                // Нормализуем для диагонального движения (чтобы не было быстрее)
                 if (moveDirection.length() > 0) {
                     moveDirection.normalize();
                 }
@@ -265,7 +354,37 @@
             }, 1000 / 30);
         }
 
-        // --- АНИМАЦИЯ КАМЕРЫ ---
+        // атака
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('click', (event) => {
+            if (!myPlayer || myHp <= 0) return;
+            
+            mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+            mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Собираем всех других игроков для проверки попадания
+            const otherPlayers = Array.from(players.values()).map(p => p.mesh);
+            
+            const intersects = raycaster.intersectObjects(otherPlayers);
+            
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
+                // Находим ID игрока по mesh
+                for (let [id, player] of players.entries()) {
+                    if (player.mesh === hitMesh) {
+                        console.log(`[CLIENT] Атака игрока ${id}`);
+                        socket.emit('player-attack', id);
+                        break;
+                    }
+                }
+            }
+        });
+
+        // анимация камеры 
         function animate() {
             requestAnimationFrame(animate);
             

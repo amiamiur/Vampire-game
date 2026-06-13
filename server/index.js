@@ -26,6 +26,9 @@ io.on('connection', (socket) => {
     bloodEssence: 0
   });
 
+  socket.emit('player-hurt', { id: socket.id, hp: 100 });
+  socket.emit('essence-update', { id: socket.id, essence: 0 });
+
   console.log(`[SERVER] Total players: ${players.size}`);
 
   // Оповещаем всех остальных о новом игроке
@@ -47,6 +50,52 @@ io.on('connection', (socket) => {
         x: data.x,
         z: data.z
       });
+    }
+  });
+
+  socket.on('player-attack', (targetId) => {
+    const attacker = players.get(socket.id);
+    const target = players.get(targetId);
+    
+    if (attacker && target && attacker.id !== target.id) {
+      const dx = attacker.x - target.x;
+      const dz = attacker.z - target.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+      
+      // Проверка дистанции
+      if (distance < 2.0) {
+        const damage = 15;
+        target.hp = Math.max(0, target.hp - damage);
+        attacker.bloodEssence += 10;
+        
+        console.log(`[SERVER] ${attacker.id} атаковал ${target.id}! HP: ${target.hp}, Кровь: ${attacker.bloodEssence}`);
+
+        io.emit('player-hurt', { id: targetId, hp: target.hp });
+        io.emit('essence-update', { id: socket.id, essence: attacker.bloodEssence });
+        
+        if (target.hp <= 0) {
+          io.emit('player-died', targetId);
+
+        // Возрождаем через 2 секунды
+        setTimeout(() => {
+            if (players.has(targetId)) {
+              const respawned = players.get(targetId);
+              respawned.hp = 100;
+              respawned.x = (Math.random() - 0.5) * 16;
+              respawned.z = (Math.random() - 0.5) * 16;
+              respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
+              
+              io.emit('player-respawn', {
+                id: targetId,
+                x: respawned.x,
+                z: respawned.z,
+                hp: respawned.hp,
+                essence: respawned.bloodEssence
+              });
+            }
+          }, 2000);
+        }
+      }
     }
   });
 
