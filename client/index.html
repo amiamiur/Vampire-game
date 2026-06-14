@@ -143,6 +143,70 @@
             }
         }
 
+        // Частицы при атаке
+        class BloodParticleSystem {
+            constructor(scene) {
+                this.scene = scene;
+                this.particles = [];
+            }
+            
+            burst(position, count = 12) {
+                for (let i = 0; i < count; i++) {
+                    const geometry = new THREE.SphereGeometry(0.06, 6, 6);
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: 0xcc2222, 
+                        emissive: 0x441111,
+                        emissiveIntensity: 0.5
+                    });
+                    const particle = new THREE.Mesh(geometry, material);
+                    
+                    particle.position.copy(position);
+                    particle.userData = {
+                        velocity: new THREE.Vector3(
+                            (Math.random() - 0.5) * 4,
+                            Math.random() * 4 + 1,
+                            (Math.random() - 0.5) * 4
+                        ),
+                        life: 0.6,
+                        maxLife: 0.6
+                    };
+                    
+                    this.scene.add(particle);
+                    this.particles.push(particle);
+                }
+            }
+            
+            update(delta) {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.userData.life -= delta;
+                    
+                    if (p.userData.life <= 0) {
+                        this.scene.remove(p);
+                        this.particles.splice(i, 1);
+                        continue;
+                    }
+                    
+                    // Движение
+                    p.position.x += p.userData.velocity.x * delta;
+                    p.position.y += p.userData.velocity.y * delta;
+                    p.position.z += p.userData.velocity.z * delta;
+                    
+                    // Гравитация
+                    p.userData.velocity.y -= 6 * delta;
+                    
+                    // Прозрачность и размер
+                    const opacity = p.userData.life / p.userData.maxLife;
+                    p.material.opacity = opacity;
+                    p.material.transparent = true;
+                    const scale = 0.3 + opacity * 0.5;
+                    p.scale.set(scale, scale, scale);
+                }
+            }
+        }
+
+        
+
         // --- ИГРОВЫЕ ОБЪЕКТЫ ---
         const players = new Map();
         let mySocketId = null;
@@ -152,6 +216,7 @@
         const healthBar = document.getElementById('health-bar');
         const healthValue = document.getElementById('health-value');
         const essenceValueSpan = document.getElementById('essence-value');
+        const bloodParticles = new BloodParticleSystem(scene);
         let myHp = 100;
         let myEssence = 0;
 
@@ -228,7 +293,7 @@
         });
 
         socket.on('player-hurt', (data) => {
-            if (data.id === mySocketId) {
+             if (data.id === mySocketId) {
                 myHp = data.hp;
                 updateUI();
                 
@@ -236,6 +301,10 @@
                 setTimeout(() => {
                     document.body.style.animation = 'bloodFlash 0.3s ease-out';
                 }, 10);
+                
+                if (myPlayer) {
+                    bloodParticles.burst(myPlayer.mesh.position, 15);
+                }
                 
                 if (myHp <= 0) {
                     document.getElementById('status').innerText = 'Мёртв...';
@@ -247,6 +316,7 @@
                     setTimeout(() => {
                         if (hurtPlayer.mesh) hurtPlayer.mesh.material.emissiveIntensity = 0.1;
                     }, 200);
+                    bloodParticles.burst(hurtPlayer.mesh.position, 15);
                 }
             }
         });
@@ -304,16 +374,16 @@
         
         // Отдельно обрабатываем других игроков
         if (data.id !== mySocketId) {
-            const respawned = players.get(data.id);
-            if (respawned) {
-                respawned.setPosition(data.x, data.z);
-                respawned.mesh.material.color.setHex(0x883333);
-                respawned.mesh.material.emissiveIntensity = 0.1;
-                respawned.mesh.material.transparent = false;
-                respawned.mesh.material.opacity = 1;
+                const respawned = players.get(data.id);
+                if (respawned) {
+                    respawned.setPosition(data.x, data.z);
+                    respawned.mesh.material.color.setHex(0x883333);
+                    respawned.mesh.material.emissiveIntensity = 0.1;
+                    respawned.mesh.material.transparent = false;
+                    respawned.mesh.material.opacity = 1;
+                }
             }
-        }
-    });
+        });
 
         
 
@@ -422,6 +492,12 @@
         function animate() {
             requestAnimationFrame(animate);
             
+            const now = performance.now();
+            const delta = Math.min(0.033, (now - (window._lastFrame || now)) / 1000);
+            window._lastFrame = now;
+
+            bloodParticles.update(delta);
+
             if (myPlayer) {
                 controls.target.set(
                     myPlayer.mesh.position.x,
