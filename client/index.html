@@ -155,6 +155,17 @@
         let myHp = 100;
         let myEssence = 0;
 
+        const keyState = {
+            w: false,
+            s: false,
+            a: false,
+            d: false
+        };
+
+        let moveInterval = null;
+        const MOVE_SPEED = 5;
+        const BOUNDS = 9;
+
         function updateUI() {
             const percent = (myHp / 100) * 100;
             healthBar.style.width = `${percent}%`;
@@ -185,12 +196,26 @@
 
         socket.on('current-players', (playersData) => {
             console.log('[CLIENT] Получены текущие игроки:', playersData);
+            let foundSelf = false;
+            
             playersData.forEach(p => {
                 if (p.id !== mySocketId) {
                     const newPlayer = new SimplePlayer(p.id, p.x, p.z, 0x883333);
                     players.set(p.id, newPlayer);
+                } else if (p.id === mySocketId && !myPlayer) {
+                    myPlayer = new SimplePlayer(mySocketId, p.x, p.z, 0xcc4444);
+                    document.getElementById('status').innerText = 'В игре';
+                    foundSelf = true;
                 }
             });
+            
+            // Если своего игрока не нашли в списке, создаём с позицией 0 и 0
+            if (!foundSelf && mySocketId && !myPlayer) {
+                console.log('[CLIENT] Свой игрок не найден в списке, создаём с 0,0');
+                myPlayer = new SimplePlayer(mySocketId, 0, 0, 0xcc4444);
+                document.getElementById('status').innerText = 'В игре';
+                socket.emit('player-move', { x: 0, z: 0 });
+            }
         });
 
         socket.on('player-disconnected', (id) => {
@@ -207,7 +232,6 @@
                 myHp = data.hp;
                 updateUI();
                 
-                // Эффект получения урона
                 document.body.style.animation = 'none';
                 setTimeout(() => {
                     document.body.style.animation = 'bloodFlash 0.3s ease-out';
@@ -218,8 +242,7 @@
                 }
             } else {
                 const hurtPlayer = players.get(data.id);
-                if (hurtPlayer) {
-                    // Визуальный эффект для других игроков
+                if (hurtPlayer && hurtPlayer.mesh.material.opacity !== 0.5) {
                     hurtPlayer.mesh.material.emissiveIntensity = 0.8;
                     setTimeout(() => {
                         if (hurtPlayer.mesh) hurtPlayer.mesh.material.emissiveIntensity = 0.1;
@@ -239,49 +262,60 @@
             if (id === mySocketId) {
                 console.log('[CLIENT] Вы погибли! Возрождение через 2 секунды...');
                 document.getElementById('status').innerText = 'Погиб... возрождение...';
-            } else {
+                
+                if (moveInterval) {
+                    clearInterval(moveInterval);
+                    moveInterval = null;
+                }
+                
+                if (myPlayer) {
+                    myPlayer.mesh.material.transparent = true;
+                    myPlayer.mesh.material.opacity = 0.4;
+                    myPlayer.mesh.material.color.setHex(0x331111);
+                    myPlayer.mesh.material.emissiveIntensity = 0.05;
+                }
+            } 
+            
+            if (id !== mySocketId) {
                 const deadPlayer = players.get(id);
                 if (deadPlayer) {
                     deadPlayer.mesh.material.color.setHex(0x331111);
+                    deadPlayer.mesh.material.emissiveIntensity = 0.05;
+                    deadPlayer.mesh.material.transparent = true;
+                    deadPlayer.mesh.material.opacity = 0.5;
                 }
             }
         });
 
         socket.on('player-respawn', (data) => {
-            if (data.id === mySocketId) {
-                myHp = data.hp;
-                myEssence = data.essence;
+        if (data.id === mySocketId) {
+            myHp = data.hp;
+            myEssence = data.essence;
+            if (myPlayer) {
                 myPlayer.setPosition(data.x, data.z);
-                updateUI();
-                document.getElementById('status').innerText = 'В игре';
-            } else {
-                const respawned = players.get(data.id);
-                if (respawned) {
-                    respawned.setPosition(data.x, data.z);
-                    respawned.mesh.material.color.setHex(0x883333);
-                    respawned.mesh.material.emissiveIntensity = 0.1;
-                }
+                myPlayer.mesh.material.transparent = false;
+                myPlayer.mesh.material.opacity = 1;
+                myPlayer.mesh.material.color.setHex(0xcc4444);
+                myPlayer.mesh.material.emissiveIntensity = 0.1;
             }
-        });
-
-        // Создаём своего игрока после получения ID
-        setTimeout(() => {
-            if (mySocketId && !myPlayer) {
-                myPlayer = new SimplePlayer(mySocketId, 0, 0, 0xcc4444);
-                document.getElementById('status').innerText = 'В игре';
+            updateUI();
+            document.getElementById('status').innerText = 'В игре';
+        }
+        
+        // Отдельно обрабатываем других игроков
+        if (data.id !== mySocketId) {
+            const respawned = players.get(data.id);
+            if (respawned) {
+                respawned.setPosition(data.x, data.z);
+                respawned.mesh.material.color.setHex(0x883333);
+                respawned.mesh.material.emissiveIntensity = 0.1;
+                respawned.mesh.material.transparent = false;
+                respawned.mesh.material.opacity = 1;
             }
-        }, 500);
+        }
+    });
 
-        const keyState = {
-            w: false,
-            s: false,
-            a: false,
-            d: false
-        };
-
-        let moveInterval = null;
-        const MOVE_SPEED = 5;
-        const BOUNDS = 9;
+        
 
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
@@ -366,14 +400,14 @@
             
             raycaster.setFromCamera(mouse, camera);
             
-            // Собираем всех других игроков для проверки попадания
-            const otherPlayers = Array.from(players.values()).map(p => p.mesh);
+            const alivePlayers = Array.from(players.values())
+                .filter(p => p.mesh.material.opacity !== 0.5)
+                .map(p => p.mesh);
             
-            const intersects = raycaster.intersectObjects(otherPlayers);
+            const intersects = raycaster.intersectObjects(alivePlayers);
             
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
-                // Находим ID игрока по mesh
                 for (let [id, player] of players.entries()) {
                     if (player.mesh === hitMesh) {
                         console.log(`[CLIENT] Атака игрока ${id}`);

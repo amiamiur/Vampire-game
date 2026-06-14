@@ -14,36 +14,37 @@ app.use(express.static(path.join(__dirname, '../client')));
 // Хранилище игроков в памяти
 const players = new Map();
 
+
+
 io.on('connection', (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
+
+    // константы для начального спавна
+  const randomX = (Math.random() - 0.5) * 16;
+  const randomZ = (Math.random() - 0.5) * 16;
   
-  // Добавляем игрока
   players.set(socket.id, {
     id: socket.id,
-    x: 0,
-    z: 0,
+    x: randomX,
+    z: randomZ,
     hp: 100,
-    bloodEssence: 0
+    bloodEssence: 0,
+    isAlive: true
   });
 
   socket.emit('player-hurt', { id: socket.id, hp: 100 });
   socket.emit('essence-update', { id: socket.id, essence: 0 });
 
   console.log(`[SERVER] Total players: ${players.size}`);
-
-  // Оповещаем всех остальных о новом игроке
   socket.broadcast.emit('player-connected', players.get(socket.id));
 
-  // Отправляем новому игроку список всех существующих
   socket.emit('current-players', Array.from(players.values()));
 
-  // Обработка движения
   socket.on('player-move', (data) => {
     const player = players.get(socket.id);
-    if (player) {
+    if (player && player.isAlive) {
       player.x = data.x;
       player.z = data.z;
-
 
       socket.broadcast.emit('player-moved', {
         id: socket.id,
@@ -57,7 +58,7 @@ io.on('connection', (socket) => {
     const attacker = players.get(socket.id);
     const target = players.get(targetId);
     
-    if (attacker && target && attacker.id !== target.id) {
+    if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
       const dx = attacker.x - target.x;
       const dz = attacker.z - target.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
@@ -74,16 +75,17 @@ io.on('connection', (socket) => {
         io.emit('essence-update', { id: socket.id, essence: attacker.bloodEssence });
         
         if (target.hp <= 0) {
+          target.isAlive = false;
           io.emit('player-died', targetId);
 
-        // Возрождаем через 2 секунды
-        setTimeout(() => {
+          setTimeout(() => {
             if (players.has(targetId)) {
               const respawned = players.get(targetId);
               respawned.hp = 100;
               respawned.x = (Math.random() - 0.5) * 16;
               respawned.z = (Math.random() - 0.5) * 16;
               respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
+              respawned.isAlive = true; 
               
               io.emit('player-respawn', {
                 id: targetId,
@@ -99,12 +101,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Обработка отключения
   socket.on('disconnect', () => {
     console.log(`[SERVER] Player disconnected: ${socket.id}`);
     players.delete(socket.id);
     
-    // Сообщаем всем, что игрок отключился
     io.emit('player-disconnected', socket.id);
     
     console.log(`[SERVER] Total players: ${players.size}`);
