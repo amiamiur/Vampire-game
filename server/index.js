@@ -43,15 +43,18 @@ io.on('connection', (socket) => {
   socket.on('player-move', (data) => {
     const player = players.get(socket.id);
     if (player && player.isAlive) {
-      player.x = data.x;
-      player.z = data.z;
+        player.x = data.x;
+        player.z = data.z;
 
-      socket.broadcast.emit('player-moved', {
-        id: socket.id,
-        x: data.x,
-        z: data.z
-      });
-    }
+        socket.broadcast.emit('player-moved', {
+            id: socket.id,
+            x: data.x,
+            z: data.z,
+            dx: data.dx || 0,
+            dz: data.dz || 0,
+            isMoving: data.isMoving || false
+        });
+      }
   });
 
   socket.on('player-attack', (targetId) => {

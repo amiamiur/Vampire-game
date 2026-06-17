@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { io } from 'https://cdn.socket.io/4.6.1/socket.io.esm.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Player } from './classes/Player.js';
+import { VampirePlayer } from './classes/VampirePlayer.js';
 import { BloodParticleSystem } from './classes/BloodParticles.js';
 import { UI } from './ui/UI.js';
 import { setupSocketHandlers } from './network/socketHandlers.js';
@@ -62,7 +62,7 @@ scene.add(fillLight);
 
 // --- ПОЛ ---
 const gridHelper = new THREE.GridHelper(22, 20, 0xaa5555, 0x442222);
-gridHelper.position.y = -0.5;
+gridHelper.position.y = -0.2;
 scene.add(gridHelper);
 
 const groundPlane = new THREE.Mesh(
@@ -70,7 +70,7 @@ const groundPlane = new THREE.Mesh(
     new THREE.MeshStandardMaterial({ color: 0x1a0a0a, roughness: 0.8 })
 );
 groundPlane.rotation.x = -Math.PI / 2;
-groundPlane.position.y = -0.6;
+groundPlane.position.y = -0.3;
 groundPlane.receiveShadow = true;
 scene.add(groundPlane);
 
@@ -104,6 +104,7 @@ function startMoving() {
     if (state.moveInterval) return;
     
     let lastTime = performance.now();
+    let isMoving = false;
     
     state.moveInterval = setInterval(() => {
         if (!state.myPlayer) return;
@@ -130,11 +131,50 @@ function startMoving() {
         const deltaX = (moveDirection.x * right.x + moveDirection.z * forward.x) * MOVE_SPEED * delta;
         const deltaZ = (moveDirection.x * right.z + moveDirection.z * forward.z) * MOVE_SPEED * delta;
         
-        if (deltaX !== 0 || deltaZ !== 0) {
+        // Проверяем, нажата ли хотя бы одна клавиша движения
+        const isKeyDown = state.keyState.w || state.keyState.s || state.keyState.a || state.keyState.d;
+        
+        if (isKeyDown) {
+            // Движение
             const newX = Math.min(BOUNDS, Math.max(-BOUNDS, state.myPlayer.mesh.position.x + deltaX));
             const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, state.myPlayer.mesh.position.z + deltaZ));
             state.myPlayer.setPosition(newX, newZ);
-            socket.emit('player-move', { x: newX, z: newZ });
+            
+            // Отправляем движение
+            socket.emit('player-move', { 
+                x: newX, 
+                z: newZ,
+                dx: deltaX,
+                dz: deltaZ,
+                isMoving: true
+            });
+            
+            // Поворачиваем модель
+            const angle = Math.atan2(deltaX, deltaZ);
+            state.myPlayer.mesh.rotation.y = angle;
+            
+            // Включаем анимацию бега
+            if (state.myPlayer.isAlive) {
+                console.log('[startMoving] вызываем playAnimation(run)');
+                state.myPlayer.playAnimation('run');
+            }
+            isMoving = true;
+        } else {
+            // Остановка
+            if (isMoving) {
+                socket.emit('player-move', { 
+                    x: state.myPlayer.mesh.position.x, 
+                    z: state.myPlayer.mesh.position.z,
+                    dx: 0,
+                    dz: 0,
+                    isMoving: false
+                });
+                isMoving = false;
+            }
+            if (state.myPlayer.isAlive) {
+                console.log('[startMoving] вызываем playAnimation(idle)');
+                state.myPlayer.playAnimation('idle');
+            }
         }
     }, 1000 / 30);
 }
@@ -155,12 +195,12 @@ window.addEventListener('keyup', (e) => {
     if (key === 'a') state.keyState.a = false;
     if (key === 'd') state.keyState.d = false;
     
-    if (!state.keyState.w && !state.keyState.s && !state.keyState.a && !state.keyState.d) {
-        if (state.moveInterval) {
-            clearInterval(state.moveInterval);
-            state.moveInterval = null;
-        }
-    }
+    // if (!state.keyState.w && !state.keyState.s && !state.keyState.a && !state.keyState.d) {
+    //     if (state.moveInterval) {
+    //         clearInterval(state.moveInterval);
+    //         state.moveInterval = null;
+    //     }
+    // }
 });
 
 // --- АТАКА ---
@@ -175,17 +215,41 @@ window.addEventListener('click', (event) => {
     
     raycaster.setFromCamera(mouse, camera);
     
+    // Проверяем всех игроков 
     const alivePlayers = Array.from(state.players.values())
-        .filter(p => p.mesh.material.opacity !== 0.5)
+        .filter(p => p.isAlive && p.id !== state.mySocketId)
         .map(p => p.mesh);
     
-    const intersects = raycaster.intersectObjects(alivePlayers);
+    const intersects = raycaster.intersectObjects(alivePlayers, true); // true для поиска в дочерних объектах
     
     if (intersects.length > 0) {
         const hitMesh = intersects[0].object;
         for (let [id, player] of state.players.entries()) {
+            if (player.id === state.mySocketId) continue;
+            
+            let isHit = false;
             if (player.mesh === hitMesh) {
+                isHit = true;
+            } else if (player.mesh && player.mesh.children) {
+                player.mesh.children.forEach(child => {
+                    if (child === hitMesh || child.children?.includes?.(hitMesh)) {
+                        isHit = true;
+                    }
+                });
+            }
+            
+            if (isHit) {
                 console.log(`[CLIENT] Атака игрока ${id}`);
+                
+                if (state.myPlayer && state.myPlayer.isAlive) {
+                    state.myPlayer.attack();
+                    setTimeout(() => {
+                        if (state.myPlayer && state.myPlayer.isAlive) {
+                            state.myPlayer.setState('idle');
+                        }
+                    }, 500);
+                }
+                
                 socket.emit('player-attack', id);
                 break;
             }
@@ -201,7 +265,19 @@ function animate() {
     const delta = Math.min(0.033, (now - (window._lastFrame || now)) / 1000);
     window._lastFrame = now;
 
+    // Обновляем кровавые частицы
     bloodParticles.update(delta);
+    
+    // ✅ Обновляем анимации для всех игроков (включая своего)
+    state.players.forEach(player => {
+        if (player.update) {
+            player.update(delta);
+        }
+    });
+    
+    if (state.myPlayer && state.myPlayer.update) {
+        state.myPlayer.update(delta);
+    }
 
     if (state.myPlayer) {
         controls.target.set(
@@ -213,6 +289,7 @@ function animate() {
     
     controls.update();
     
+    // Мерцание свечей
     let time = Date.now() * 0.003;
     scene.children.forEach(child => {
         if (child instanceof THREE.PointLight && child.intensity < 1.0) {
@@ -222,7 +299,6 @@ function animate() {
     
     renderer.render(scene, camera);
 }
-
 animate();
 
 // --- РАЗМЕР ОКНА ---
