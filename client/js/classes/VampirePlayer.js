@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { BatProjectile } from './BatProjectile.js';
 
 export class VampirePlayer {
     constructor(id, x, z, scene, modelPath = '/assets/models/Vampire.fbx', texturePath = '/assets/textures/Texture.png') {
@@ -14,6 +15,11 @@ export class VampirePlayer {
         this.maxHp = 100;
         this.bloodEssence = 0;
         this.isAttacking = false;
+        this.ultimateCharge = 0;
+        this.maxUltimateCharge = 100;
+        this.isUltimateReady = false;
+        this.shadowProjectiles = [];
+        this.onUltimateReady = null;
         
         this.animations = {};
         this.currentAction = null;
@@ -171,12 +177,9 @@ export class VampirePlayer {
     playAnimation(name, loop = true) {
 
     if (this.isAttacking && name !== 'attack') {
-        console.log(`[VampirePlayer] Атака в процессе, пропускаем ${name}`);
         return;
     }
-        console.log(`[VampirePlayer] playAnimation вызвана: ${name}, loop=${loop}, ready=${this.ready}`);
         if (!this.ready) {
-            console.log(`[VampirePlayer] Откладываем анимацию ${name} (не готов)`);
             this.pendingAnimations.push([name, loop]);
             return;
         }
@@ -192,13 +195,11 @@ export class VampirePlayer {
         
         // Если текущая анимация совпадает — не переключаем
         if (this.currentAction && this.currentAction.getClip() === clip) {
-            console.log(`[VampirePlayer] Анимация ${name} уже играет, пропускаем`);
             return;
         }
 
         
         
-        console.log(`[VampirePlayer] Переключение на анимацию ${name}`);
         // Принудительно останавливаем всё
         this.stopAllAnimations();
         
@@ -207,7 +208,6 @@ export class VampirePlayer {
         action.clampWhenFinished = true;
         action.play();
         this.currentAction = action;
-        console.log(`[VampirePlayer] Текущая анимация установлена: ${name}`);
 }
     
     update(delta) {
@@ -304,5 +304,123 @@ export class VampirePlayer {
     
     setRotation(y) {
         if (this.mesh) this.mesh.rotation.y = y;
+    }
+
+    setRotationFromData(y) {
+        if (this.mesh) {
+            this.mesh.rotation.y = y;
+        }
+    }
+    // --- СИСТЕМА УЛЬТЫ ---
+    updateUltimate(delta) {
+        if (!this.isAlive) return;
+        if (this.ultimateCharge < this.maxUltimateCharge) {
+            // this.ultimateCharge += delta * 3; // ~33 секунды до полной зарядки
+            this.ultimateCharge += delta * 5;
+            if (this.ultimateCharge >= this.maxUltimateCharge) {
+                this.ultimateCharge = this.maxUltimateCharge;
+                this.isUltimateReady = true;
+                console.log('[VampirePlayer] Ульта готова!');
+                if (this.onUltimateReady) this.onUltimateReady();
+            }
+        }
+    }
+
+    useUltimate(socket) {
+        if (!this.isUltimateReady || !this.isAlive || this.isAttacking) return false;
+        
+        console.log('[VampirePlayer] Использована ульта!');
+        this.isUltimateReady = false;
+        this.ultimateCharge = 0;
+        this.isAttacking = true;
+        
+        // Запускаем анимацию ульты (если есть)
+        this.playAnimation('attack', false);
+        
+        const count = 3;
+        const startPos = this.mesh.position.clone();
+        startPos.y = 2.5;
+        const spreadAngle = Math.PI / 3;    
+        
+        // Направление взгляда камеры (передаём из main.js)
+        // Для простоты используем направление, куда смотрит персонаж
+        const forward = new THREE.Vector3(0, 0, 1);
+        forward.applyQuaternion(this.mesh.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        
+
+        const projectiles = [];
+        for (let i = 0; i < count; i++) {
+            const angle = -spreadAngle/2 + (i / (count - 1)) * spreadAngle;
+            const dir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            
+            // Создаём мышь
+            const bat = new BatProjectile(
+                this.scene,
+                startPos,
+                dir,
+                3 + Math.random() * 2,
+                '/assets/models/Bat.fbx' // путь к модели
+            );
+            projectiles.push(bat);
+        }
+        this.shadowProjectiles = projectiles;
+
+        if (socket) {
+            socket.emit('player-ultimate-cast', {
+                position: startPos,
+                direction: forward,
+                rotation: this.mesh.rotation.y
+            });
+        }
+            
+        
+        // Возвращаем idle через 500ms (как атака)
+        setTimeout(() => {
+            this.isAttacking = false;
+            if (this.isAlive) {
+                this.playAnimation('idle');
+            }
+        }, 500);
+        
+        return true;
+    }
+
+    updateProjectiles(delta) {
+        for (const projectile of this.shadowProjectiles) {
+            if (projectile.update) {
+                projectile.update(delta);
+            }
+        }
+        this.shadowProjectiles = this.shadowProjectiles.filter(p => p.active);
+    }
+    clearProjectiles() {
+        if (this.shadowProjectiles) {
+            this.shadowProjectiles.forEach(p => p.deactivate && p.deactivate());
+            this.shadowProjectiles = [];
+        }
+    }
+
+    checkProjectileCollisions(players, socket) {
+        for (const projectile of this.shadowProjectiles) {
+            if (!projectile.active) continue;
+            for (const [id, player] of players) {
+                if (player.id === this.id) continue;
+                if (!player.isAlive) continue;
+                const pos = player.mesh.position || player.mesh.position;
+                if (projectile.checkCollision && projectile.checkCollision(pos)) {
+                    if (socket) {
+                        socket.emit('player-ultimate-hit', { 
+                            targetId: id, 
+                            damage: projectile.damage || 40
+                        });
+                    }
+                    projectile.deactivate();
+                    console.log(`[VampirePlayer] Летучая мышь ударила ${player.id}!`);
+                    break; 
+                }
+            }
+        }
     }
 }

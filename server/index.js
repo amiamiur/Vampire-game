@@ -27,6 +27,7 @@ io.on('connection', (socket) => {
     id: socket.id,
     x: randomX,
     z: randomZ,
+    rotation: 0,
     hp: 100,
     bloodEssence: 0,
     isAlive: true
@@ -45,6 +46,7 @@ io.on('connection', (socket) => {
     if (player && player.isAlive) {
         player.x = data.x;
         player.z = data.z;
+        player.rotation = data.rotation;
 
         socket.broadcast.emit('player-moved', {
             id: socket.id,
@@ -52,56 +54,107 @@ io.on('connection', (socket) => {
             z: data.z,
             dx: data.dx || 0,
             dz: data.dz || 0,
-            isMoving: data.isMoving || false
+            isMoving: data.isMoving || false,
+            rotation: data.rotation
         });
       }
   });
 
   socket.on('player-attack', (targetId) => {
-    const attacker = players.get(socket.id);
-    const target = players.get(targetId);
-    
-    if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
-      const dx = attacker.x - target.x;
-      const dz = attacker.z - target.z;
-      const distance = Math.sqrt(dx * dx + dz * dz);
+      const attacker = players.get(socket.id);
+      const target = players.get(targetId);
       
-      // Проверка дистанции
-      if (distance < 2.0) {
-        const damage = 15;
-        target.hp = Math.max(0, target.hp - damage);
-        attacker.bloodEssence += 10;
-        
-        console.log(`[SERVER] ${attacker.id} атаковал ${target.id}! HP: ${target.hp}, Кровь: ${attacker.bloodEssence}`);
-
-        io.emit('player-hurt', { id: targetId, hp: target.hp });
-        io.emit('essence-update', { id: socket.id, essence: attacker.bloodEssence });
-        
-        if (target.hp <= 0) {
-          target.isAlive = false;
-          io.emit('player-died', targetId);
-
-          setTimeout(() => {
-            if (players.has(targetId)) {
-              const respawned = players.get(targetId);
-              respawned.hp = 100;
-              respawned.x = (Math.random() - 0.5) * 16;
-              respawned.z = (Math.random() - 0.5) * 16;
-              respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
-              respawned.isAlive = true; 
+      if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
+          const dx = attacker.x - target.x;
+          const dz = attacker.z - target.z;
+          const distance = Math.sqrt(dx * dx + dz * dz);
+          
+          if (distance < 2.0) {
+              const damage = 15;
+              target.hp = Math.max(0, target.hp - damage);
+              attacker.bloodEssence += 10;
               
-              io.emit('player-respawn', {
-                id: targetId,
-                x: respawned.x,
-                z: respawned.z,
-                hp: respawned.hp,
-                essence: respawned.bloodEssence
-              });
-            }
-          }, 2000);
-        }
+              io.emit('player-hurt', { id: targetId, hp: target.hp });
+              io.emit('essence-update', { id: socket.id, essence: attacker.bloodEssence });
+              
+              // Отправляем анимацию атаки для всех
+              io.emit('player-attack-animation', { id: socket.id });
+              
+              if (target.hp <= 0) {
+                  target.isAlive = false;
+                  io.emit('player-died', targetId);
+                  
+                  setTimeout(() => {
+                      if (players.has(targetId)) {
+                          const respawned = players.get(targetId);
+                          respawned.hp = 100;
+                          respawned.x = (Math.random() - 0.5) * 16;
+                          respawned.z = (Math.random() - 0.5) * 16;
+                          respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
+                          respawned.isAlive = true;
+                          
+                          io.emit('player-respawn', {
+                              id: targetId,
+                              x: respawned.x,
+                              z: respawned.z,
+                              hp: respawned.hp,
+                              essence: respawned.bloodEssence
+                          });
+                      }
+                  }, 2000);
+              }
+          }
+      }
+  });
+
+  socket.on('player-ultimate-hit', (data) => {
+    const attacker = players.get(socket.id);
+    const target = players.get(data.targetId);
+    if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
+      const damage = data.damage || 25;
+      target.hp = Math.max(0, target.hp - damage);
+      console.log(`[SERVER] Ульта от ${attacker.id} попала в ${target.id}, урон ${damage}, HP ${target.hp}`);
+
+      io.emit('player-hurt', { id: target.id, hp: target.hp });
+
+      if (target.hp <= 0) {
+        target.isAlive = false;
+        io.emit('player-died', target.id);
+        setTimeout(() => {
+          if (players.has(target.id)) {
+            const respawned = players.get(target.id);
+            respawned.hp = 100;
+            respawned.x = (Math.random() - 0.5) * 16;
+            respawned.z = (Math.random() - 0.5) * 16;
+            respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
+            respawned.isAlive = true;
+            io.emit('player-respawn', {
+              id: target.id,
+              x: respawned.x,
+              z: respawned.z,
+              hp: respawned.hp,
+              essence: respawned.bloodEssence
+            });
+          }
+        }, 2000);
       }
     }
+  });
+
+  socket.on('player-ultimate-cast', (data) => {
+      io.emit('player-ultimate-cast', {
+          id: socket.id,
+          position: data.position,
+          direction: data.direction,
+          rotation: data.rotation,
+          count: 3,
+          spreadAngle: Math.PI / 3,
+          speed: 4
+      });
+
+      io.emit('player-ultimate-animation', {
+          id: socket.id
+      });
   });
 
   socket.on('disconnect', () => {

@@ -21,6 +21,9 @@ const state = {
     keyState: { w: false, s: false, a: false, d: false }
 };
 
+// Препятсвия
+const obstacles = [];
+
 // --- ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a2a);
@@ -65,29 +68,116 @@ const gridHelper = new THREE.GridHelper(22, 20, 0xaa5555, 0x442222);
 gridHelper.position.y = -0.2;
 scene.add(gridHelper);
 
-const groundPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ color: 0x1a0a0a, roughness: 0.8 })
+const arenaFloor = new THREE.Mesh(
+    new THREE.CircleGeometry(12, 64),
+    new THREE.MeshStandardMaterial({
+        color: 0x2a2a2a,
+        roughness: 0.9
+    })
 );
-groundPlane.rotation.x = -Math.PI / 2;
-groundPlane.position.y = -0.3;
-groundPlane.receiveShadow = true;
-scene.add(groundPlane);
 
-// Свечи (декоративные)
-const candlePositions = [[-7, -0.3, -7], [7, -0.3, -7], [-7, -0.3, 7], [7, -0.3, 7], [0, -0.3, -8], [0, -0.3, 8]];
-candlePositions.forEach(pos => {
-    const candleLight = new THREE.PointLight(0xff6633, 0.5, 10);
-    candleLight.position.set(pos[0], pos[1], pos[2]);
-    scene.add(candleLight);
-    
-    const candleGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.4, 6);
-    const candleMat = new THREE.MeshStandardMaterial({ color: 0xccaa88 });
-    const candleMesh = new THREE.Mesh(candleGeo, candleMat);
-    candleMesh.position.set(pos[0], pos[1] + 0.2, pos[2]);
-    candleMesh.castShadow = true;
-    scene.add(candleMesh);
-});
+arenaFloor.rotation.x = -Math.PI / 2;
+arenaFloor.receiveShadow = true;
+scene.add(arenaFloor);
+
+function createCastleWall(x, z, rotationY) {
+    const wallGroup = new THREE.Group();
+
+    const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(16, 4, 0.8),
+        new THREE.MeshStandardMaterial({
+            color: 0x555555
+        })
+    );
+
+    wallGroup.add(wall);
+
+    for (let i = -7; i <= 7; i += 2) {
+        const battlement = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 0.8, 0.8),
+            new THREE.MeshStandardMaterial({
+                color: 0x666666
+            })
+        );
+
+        battlement.position.set(i, 2.4, 0);
+
+        wallGroup.add(battlement);
+    }
+
+    wallGroup.position.set(x, 2, z);
+    wallGroup.rotation.y = rotationY;
+
+    scene.add(wallGroup);
+}
+
+createCastleWall(0, 10, 0);
+createCastleWall(0, -10, 0);
+
+createCastleWall(10, 0, Math.PI / 2);
+createCastleWall(-10, 0, Math.PI / 2);
+
+function createTower(x, z) {
+    const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.4, 6, 8),
+        new THREE.MeshStandardMaterial({
+            color: 0x666666
+        })
+    );
+
+    tower.position.set(x, 3, z);
+
+    scene.add(tower);
+}
+
+createTower(9, 9);
+createTower(-9, 9);
+createTower(9, -9);
+createTower(-9, -9);
+
+function createRock(x, z, scale = 1) {
+    const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(scale),
+        new THREE.MeshStandardMaterial({
+            color: 0x444444
+        })
+    );
+
+    rock.position.set(x, scale * 0.8, z);
+
+    rock.rotation.set(
+        Math.random(),
+        Math.random(),
+        Math.random()
+    );
+
+    scene.add(rock);
+
+    obstacles.push({
+        mesh: rock,
+        radius: scale * 1.0
+    });
+}
+
+createRock(6, 2, 1.2);
+createRock(-4, 7, 1);
+createRock(6, -5, 1.4);
+createRock(-3, -1, 0.8);
+
+const crystal = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.6),
+    new THREE.MeshStandardMaterial({
+        color: 0xaa0000,
+        emissive: 0x550000
+    })
+)
+
+const light = new THREE.PointLight(
+    0xaa0000,
+    1.5,
+    6
+);
+
 
 // --- ИНИЦИАЛИЗАЦИЯ ---
 const ui = new UI();
@@ -99,6 +189,21 @@ setupSocketHandlers(socket, state, ui, bloodParticles);
 // --- УПРАВЛЕНИЕ ---
 const MOVE_SPEED = 5;
 const BOUNDS = 9;
+
+function collidesWithObstacle(x, z) {
+    for (const obstacle of obstacles) {
+        const dx = x - obstacle.mesh.position.x;
+        const dz = z - obstacle.mesh.position.z;
+
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        if (distance < obstacle.radius + 0.7) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 function startMoving() {
     if (state.moveInterval) return;
@@ -136,17 +241,34 @@ function startMoving() {
         
         if (isKeyDown) {
             // Движение
-            const newX = Math.min(BOUNDS, Math.max(-BOUNDS, state.myPlayer.mesh.position.x + deltaX));
-            const newZ = Math.min(BOUNDS, Math.max(-BOUNDS, state.myPlayer.mesh.position.z + deltaZ));
-            state.myPlayer.setPosition(newX, newZ);
-            
+            const newX = Math.min(
+                BOUNDS,
+                Math.max(
+                    -BOUNDS,
+                    state.myPlayer.mesh.position.x + deltaX
+                )
+            );
+
+            const newZ = Math.min(
+                BOUNDS,
+                Math.max(
+                    -BOUNDS,
+                    state.myPlayer.mesh.position.z + deltaZ
+                )
+            );
+
+            if (!collidesWithObstacle(newX, newZ)) {
+                state.myPlayer.setPosition(newX, newZ);
+            }
+                        
             // Отправляем движение
             socket.emit('player-move', { 
                 x: newX, 
                 z: newZ,
                 dx: deltaX,
                 dz: deltaZ,
-                isMoving: true
+                isMoving: true,
+                rotation: state.myPlayer.mesh.rotation.y
             });
             
             // Поворачиваем модель
@@ -155,24 +277,23 @@ function startMoving() {
             
             // Включаем анимацию бега
             if (state.myPlayer.isAlive) {
-                console.log('[startMoving] вызываем playAnimation(run)');
                 state.myPlayer.playAnimation('run');
             }
             isMoving = true;
         } else {
             // Остановка
             if (isMoving) {
-                socket.emit('player-move', { 
-                    x: state.myPlayer.mesh.position.x, 
-                    z: state.myPlayer.mesh.position.z,
-                    dx: 0,
-                    dz: 0,
-                    isMoving: false
-                });
-                isMoving = false;
+            socket.emit('player-move', { 
+                x: state.myPlayer.mesh.position.x, 
+                z: state.myPlayer.mesh.position.z,
+                dx: 0,
+                dz: 0,
+                isMoving: false,
+                rotation: state.myPlayer.mesh.rotation.y
+            });
+            isMoving = false;
             }
             if (state.myPlayer.isAlive) {
-                console.log('[startMoving] вызываем playAnimation(idle)');
                 state.myPlayer.playAnimation('idle');
             }
         }
@@ -181,11 +302,19 @@ function startMoving() {
 
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
+    if (key === 'e') {
+        if (state.myPlayer && state.myPlayer.isAlive) {
+            state.myPlayer.useUltimate(socket);
+            socket.emit('player-ultimate-animation');
+        }
+        return;
+    }   
     if (key === 'w') state.keyState.w = true;
     if (key === 's') state.keyState.s = true;
     if (key === 'a') state.keyState.a = true;
     if (key === 'd') state.keyState.d = true;
     if (!state.moveInterval) startMoving();
+    
 });
 
 window.addEventListener('keyup', (e) => {
@@ -243,11 +372,6 @@ window.addEventListener('click', (event) => {
                 
                 if (state.myPlayer && state.myPlayer.isAlive) {
                     state.myPlayer.attack();
-                    setTimeout(() => {
-                        if (state.myPlayer && state.myPlayer.isAlive) {
-                            state.myPlayer.setState('idle');
-                        }
-                    }, 500);
                 }
                 
                 socket.emit('player-attack', id);
@@ -261,25 +385,27 @@ window.addEventListener('click', (event) => {
 function animate() {
     requestAnimationFrame(animate);
     
-    const now = performance.now();
-    const delta = Math.min(0.033, (now - (window._lastFrame || now)) / 1000);
-    window._lastFrame = now;
+    const delta = Math.min(0.033, (performance.now() - (window._lastFrame || performance.now())) / 1000);
+    window._lastFrame = performance.now();
 
-    // Обновляем кровавые частицы
     bloodParticles.update(delta);
     
-    // ✅ Обновляем анимации для всех игроков (включая своего)
+    // Обновляем анимации других игроков
     state.players.forEach(player => {
-        if (player.update) {
-            player.update(delta);
+    if (player.update) player.update(delta);
+
+        if (player.updateProjectiles) {
+            player.updateProjectiles(delta);
         }
     });
     
-    if (state.myPlayer && state.myPlayer.update) {
-        state.myPlayer.update(delta);
-    }
-
     if (state.myPlayer) {
+        state.myPlayer.update(delta);
+        state.myPlayer.updateUltimate(delta);
+        state.myPlayer.updateProjectiles(delta);
+        state.myPlayer.checkProjectileCollisions(state.players, socket);
+        ui.updateUltimate(state.myPlayer.ultimateCharge, state.myPlayer.maxUltimateCharge);
+        
         controls.target.set(
             state.myPlayer.mesh.position.x,
             state.myPlayer.mesh.position.y + 0.5,
@@ -288,15 +414,6 @@ function animate() {
     }
     
     controls.update();
-    
-    // Мерцание свечей
-    let time = Date.now() * 0.003;
-    scene.children.forEach(child => {
-        if (child instanceof THREE.PointLight && child.intensity < 1.0) {
-            child.intensity = 0.4 + Math.sin(time + child.position.x) * 0.2;
-        }
-    });
-    
     renderer.render(scene, camera);
 }
 animate();
