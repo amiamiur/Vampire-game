@@ -52,7 +52,7 @@ export class TextureManager {
 
         const normal =
             this.loadTexture(
-                '/assets/textures/wall/sloppy-mortar-stone-wall_normal_ogl.png'
+                '/assets/textures/wall/sloppy-mortar-stone-wall_normal-ogl.png'
             );
 
         const roughness =

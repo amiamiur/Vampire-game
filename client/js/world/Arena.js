@@ -1,0 +1,234 @@
+    import * as THREE from 'three';
+
+    export class Arena {
+        constructor(scene, textures) {
+            this.scene = scene;
+            this.textures = textures;
+            this.radius = 9;
+
+            this.obstacles = [];
+            this.torches = [];
+
+            this.createArena();
+        }
+
+        createArena() {
+            const scene = this.scene;
+            const obstacles = this.obstacles;
+            const torches = this.torches;
+            const floorMaterial = this.textures.loadFloorMaterial();
+            const wallMaterial = this.textures.loadWallMaterial();
+            const rockMaterial = this.textures.loadRockMaterial();
+            const towerMaterial = this.textures.loadWallMaterial();
+
+            const arenaFloor = new THREE.Mesh(
+                new THREE.CircleGeometry(12, 64),
+                floorMaterial
+            );
+
+            arenaFloor.geometry.setAttribute(
+                'uv2',
+                new THREE.BufferAttribute(
+                    arenaFloor.geometry.attributes.uv.array,
+                    2
+                )
+            );
+            arenaFloor.rotation.x = -Math.PI / 2;
+            arenaFloor.receiveShadow = true;
+            this.scene.add(arenaFloor);
+
+            function createTower(x, z) {
+                const tower = new THREE.Mesh(
+                    new THREE.CylinderGeometry(
+                        1.2,
+                        1.4,
+                        6,
+                        24
+                    ),
+                    towerMaterial
+                );
+                tower.geometry.setAttribute(
+                    'uv2',
+                    new THREE.BufferAttribute(
+                        tower.geometry.attributes.uv.array,
+                        2
+                    )
+                );
+                tower.position.set(x, 3, z);
+                scene.add(tower);
+            }
+            createTower(9, 9);
+            createTower(-9, 9);
+            createTower(9, -9);
+            createTower(-9, -9);
+
+            function createRock(x, z, scale = 1) {
+                const rock = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(scale, 2),
+                    rockMaterial
+                );
+            
+                rock.geometry.setAttribute(
+                    'uv2',
+                    new THREE.BufferAttribute(
+                        rock.geometry.attributes.uv.array,
+                        2
+                    )
+                );
+            
+                rock.position.set(
+                    x,
+                    scale * 0.8,
+                    z
+                );
+            
+                rock.rotation.set(
+                    Math.random(),
+                    Math.random(),
+                    Math.random()
+                );
+            
+                scene.add(rock);
+            
+                obstacles.push({
+                    mesh: rock,
+                    radius: scale
+                });
+            }
+            // createRock(6, 2, 1.2);
+            // createRock(-4, 7, 1);
+            // createRock(6, -5, 1.4);
+            // createRock(-3, -1, 0.8);
+
+            function createCastleWall(x, z, rotationY) {
+                const wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(16, 4, 0.8),
+                    wallMaterial
+                );
+            
+                wall.geometry.setAttribute(
+                    'uv2',
+                    new THREE.BufferAttribute(
+                        wall.geometry.attributes.uv.array,
+                        2
+                    )
+                );
+            
+                wall.position.set(x, 2, z);
+                wall.rotation.y = rotationY;
+            
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+            
+                scene.add(wall);
+            }
+            
+            createCastleWall(0, 10, 0);
+            createCastleWall(0, -10, 0);
+            
+            createCastleWall(10, 0, Math.PI / 2);
+            createCastleWall(-10, 0, Math.PI / 2);
+
+            //Факел
+            function createTorch(x, y, z) {
+            
+                const light = new THREE.PointLight(
+                    0xff8844,
+                    2.5,
+                    8
+                );
+            
+                light.position.set(x, y, z);
+            
+                scene.add(light);
+            
+                return light;
+            }
+
+            torches.push(createTorch(5, 2.5, 9.4));
+            torches.push(createTorch(-5, 2.5, 9.4));
+            
+            torches.push(createTorch(5, 2.5, -9.4));
+            torches.push(createTorch(-5, 2.5, -9.4));
+            
+            torches.push(createTorch(9.4, 2.5, 5));
+            torches.push(createTorch(9.4, 2.5, -5));
+            
+            torches.push(createTorch(-9.4, 2.5, 5));
+            torches.push(createTorch(-9.4, 2.5, -5));
+
+            function createBrokenColumn(x, z) {
+                const column = new THREE.Mesh(
+                    new THREE.CylinderGeometry(
+                        0.3,
+                        0.35,
+                        2.5,
+                        12
+                    ),
+                    wallMaterial
+                );
+            
+                column.position.set(x, 1.2, z);
+            
+                column.rotation.z =
+                    (Math.random() - 0.5) * 0.3;
+            
+                scene.add(column);
+            
+                obstacles.push({
+                    mesh: column,
+                    radius: 0.1
+                });
+            }
+            
+            createBrokenColumn(2, 4);
+            createBrokenColumn(6, 2);
+            createBrokenColumn(-3,-1);
+            createBrokenColumn(3, 7);
+            createBrokenColumn(1, 8);
+            createBrokenColumn(-1,5);
+            createBrokenColumn(1, -4);
+            createBrokenColumn(-6, -2);
+            createBrokenColumn(-8,-1);
+        }
+
+        getObstacles() {
+            return this.obstacles;
+        }
+
+        getTorches() {
+            return this.torches;
+        }
+
+        getRadius() {
+            return this.radius;
+        }
+
+        checkCollision(x, z, playerRadius = 0.7) {
+
+            for (const obstacle of this.obstacles) {
+
+                const dx = x - obstacle.mesh.position.x;
+                const dz = z - obstacle.mesh.position.z;
+
+                const distance =
+                    Math.sqrt(dx * dx + dz * dz);
+
+                if (distance < obstacle.radius + playerRadius) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        update(delta) {
+            const time = performance.now() * 0.003;
+
+            this.torches.forEach((torch, index) => {
+                torch.intensity =
+                    2.5 +
+                    Math.sin(time * 5 + index) * 0.8;
+            });
+        }
+    }
