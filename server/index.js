@@ -2,36 +2,40 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const Player = require("./game/Player.js");
+const GameManager = require("./game/GameManager.js");
 
 const app = express();
+
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: { origin: '*' }
 });
 
-app.use(express.static(path.join(__dirname, '../client')));
-
-// Хранилище игроков в памяти
+const game = new GameManager(io);
 const players = new Map();
 
-
+app.use(express.static(path.join(__dirname, '../client')));
 
 io.on('connection', (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
 
-    // константы для начального спавна
-  const randomX = (Math.random() - 0.5) * 16;
-  const randomZ = (Math.random() - 0.5) * 16;
-  
-  players.set(socket.id, {
-    id: socket.id,
-    x: randomX,
-    z: randomZ,
-    rotation: 0,
-    hp: 100,
-    bloodEssence: 0,
-    isAlive: true
-  });
+  const player =
+    new Player(
+    socket.id,
+    socket
+    );
+    game.join(player);  
+
+  socket.on(
+      "join-duel",
+      ()=>{
+
+          duelManager.join(socket);
+
+      }
+  );
 
   socket.emit('player-hurt', { id: socket.id, hp: 100 });
   socket.emit('essence-update', { id: socket.id, essence: 0 });
@@ -81,27 +85,9 @@ io.on('connection', (socket) => {
               io.emit('player-attack-animation', { id: socket.id });
               
               if (target.hp <= 0) {
-                  target.isAlive = false;
-                  io.emit('player-died', targetId);
-                  
-                  setTimeout(() => {
-                      if (players.has(targetId)) {
-                          const respawned = players.get(targetId);
-                          respawned.hp = 100;
-                          respawned.x = (Math.random() - 0.5) * 16;
-                          respawned.z = (Math.random() - 0.5) * 16;
-                          respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
-                          respawned.isAlive = true;
-                          
-                          io.emit('player-respawn', {
-                              id: targetId,
-                              x: respawned.x,
-                              z: respawned.z,
-                              hp: respawned.hp,
-                              essence: respawned.bloodEssence
-                          });
-                      }
-                  }, 2000);
+                  target.isAlive=false;
+                  io.emit('player-died',targetId);
+                  duelManager.playerKilled(targetId);
               }
           }
       }
@@ -160,6 +146,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`[SERVER] Player disconnected: ${socket.id}`);
     players.delete(socket.id);
+
+    game.remove?.(socket.id);
     
     io.emit('player-disconnected', socket.id);
     
