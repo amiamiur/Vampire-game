@@ -4,6 +4,8 @@ class Player {
         this.id = id;
         this.socket = socket;
 
+        this.dbId=null;
+
         this.hp = 100;
         this.essence = 0;
 
@@ -14,14 +16,17 @@ class Player {
         this.isAlive=true;
         this.roundKills = 0;
     }
-    reset(){
+    reset() {
         this.hp = 100;
         this.isAlive = true;
 
-        this.x =
-        (Math.random()-0.5)*10;
-        this.z =
-        (Math.random()-0.5)*10;
+        if (this.spawnIndex === 0) {
+            this.x = -8;
+            this.z = 0;
+        } else {
+            this.x = 8;
+            this.z = 0;
+        }
     }
     damage(amount){
         this.hp -= amount;

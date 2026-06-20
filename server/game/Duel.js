@@ -45,9 +45,12 @@ class Duel {
             });
         });
 
-        this.io.emit("round-start", {
-            round: this.round,
-            score: this.score
+        this.players.forEach(p=>{
+            this.io.to(p.socket.id).emit("round-start",{
+                round:this.round,
+                x:p.x,
+                z:p.z
+            });
         });
 
         this.active = true;

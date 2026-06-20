@@ -27,9 +27,17 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
         }
     });
 
-    socket.on('round-start', (data) => {
-        console.log('[CLIENT] Новый раунд:', data.round);
-        document.getElementById('status').innerText = `Раунд ${data.round}`;
+    socket.on('round-start',(data)=>{
+
+    console.log("Раунд",data.round);
+
+    if(state.myPlayer){
+        state.myPlayer.respawn(
+        data.x,
+        data.z
+        );
+    }
+    document.getElementById('status').innerText=`Раунд ${data.round}`;
     });
 
     socket.on('round-end', (data) => {

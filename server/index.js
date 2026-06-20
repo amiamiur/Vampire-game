@@ -6,6 +6,7 @@ const path = require('path');
 const Player = require("./game/Player.js");
 const GameManager = require("./game/GameManager.js");
 
+const db = require("./database.js");
 const app = express();
 
 const server = http.createServer(app);
@@ -15,67 +16,103 @@ const io = new Server(server, {
 });
 
 const game = new GameManager(io);
+
+db.query("SELECT * FROM players")
+.then(result=>{
+    console.log("DB PLAYERS:", result.rows);
+})
+.catch(err=>{
+    console.log("DB ERROR:", err);
+});
 const players = new Map();
 
 app.use(express.static(path.join(__dirname, '../client')));
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
 
-  const player = new Player(
-      socket.id,
-      socket
+  const player = new Player(socket.id, socket);
+
+    await db.query(
+    `
+    INSERT INTO players(nickname)
+    VALUES($1)
+    RETURNING id
+    `,
+    ["Vampire_" + socket.id.slice(0,5)]
+    )
+    .then(result=>{
+        player.dbId = result.rows[0].id;
+
+        console.log(
+            "[DB] Player created:",
+            player.dbId
+        );
+    })
+
+    players.set(socket.id, player);
+
+    socket.emit(
+        'current-players',
+        Array.from(players.values()).map(p => ({
+            id:p.id,
+            x:p.x,
+            z:p.z,
+            rotation:p.rotation,
+            hp:p.hp,
+            essence:p.essence,
+            isAlive:p.isAlive
+        }))
     );
-  players.set(
-      socket.id,
-      player
-  );
-  game.join(player);
-  
-  socket.broadcast.emit(
-      'player-connected',
-      {
-          id:player.id,
-          x:player.x,
-          z:player.z,
-          rotation:player.rotation,
-          hp:player.hp,
-          essence:player.essence,
-          isAlive:player.isAlive
-      }
-  );
-  
-  socket.emit(
-      'current-players',
-      Array.from(players.values()).map(p=>({
-          id:p.id,
-          x:p.x,
-          z:p.z,
-          rotation:p.rotation,
-          hp:p.hp,
-          essence:p.essence,
-          isAlive:p.isAlive
-      }))
-  );
+
+    game.join(player);    
+
+
+    socket.broadcast.emit('player-connected',{
+        id:player.id,
+        x:player.x,
+        z:player.z,
+        rotation:player.rotation,
+        hp:player.hp,
+        essence:player.essence,
+        isAlive:player.isAlive
+    });
 
   console.log(`[SERVER] Total players: ${players.size}`);
   socket.on('player-move', (data) => {
     const player = players.get(socket.id);
-    if (player && player.isAlive) {
-        player.x = data.x;
-        player.z = data.z;
-        player.rotation = data.rotation;
 
-        socket.broadcast.emit('player-moved', {
-            id: socket.id,
-            x: data.x,
-            z: data.z,
-            dx: data.dx || 0,
-            dz: data.dz || 0,
-            isMoving: data.isMoving || false,
-            rotation: data.rotation
-        });
-      }
+    if(player && player.isAlive){
+    let x = data.x;
+    let z = data.z;
+    
+    // границы арены
+    const SIZE = 10;
+
+    x=Math.max(
+        -SIZE,
+        Math.min(SIZE,x)
+    );
+
+    z=Math.max(
+        -SIZE,
+        Math.min(SIZE,z)
+    );
+
+    player.x=x;
+    player.z=z;
+    player.rotation=data.rotation;
+
+    socket.broadcast.emit('player-moved',
+    {
+    id:socket.id,
+    x,
+    z,
+    rotation:data.rotation,
+    isMoving:data.isMoving
+        }
+        );
+    }
   });
 
   socket.on(
@@ -114,16 +151,30 @@ io.on('connection', (socket) => {
       });
   });
 
-  socket.on('disconnect', () => {
-    console.log(`[SERVER] Player disconnected: ${socket.id}`);
-    players.delete(socket.id);
+  socket.on('disconnect', async () => {
+        console.log(`[SERVER] Player disconnected: ${socket.id}`);
 
-    game.remove?.(socket.id);
-    
-    io.emit('player-disconnected', socket.id);
-    
-    console.log(`[SERVER] Total players: ${players.size}`);
-  });
+        const player = players.get(socket.id);
+
+        if(player?.dbId){
+            await db.query(
+            `
+            UPDATE players
+            SET last_seen = NOW()
+            WHERE id=$1
+            `,
+            [player.dbId]);
+        }
+
+        players.delete(socket.id);
+
+        game.remove?.(socket.id);
+        io.emit(
+            'player-disconnected',
+            socket.id
+        );
+        console.log(`[SERVER] Total players: ${players.size}`);
+    });
 });
 
 const PORT = process.env.PORT || 3000;

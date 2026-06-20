@@ -1,5 +1,5 @@
 //GameManager
-const Duel = require("./Duel");
+const Duel = require("./Duel.js");
 
 
 class GameManager {
@@ -18,7 +18,11 @@ constructor(io){
         if(this.waiting.length >= 2){
             const p1 = this.waiting.shift();
             const p2 = this.waiting.shift();
-            const duel = new Duel(p1, p2, this.io);
+
+            p1.spawnIndex = 0;
+            p2.spawnIndex = 1;
+
+            const duel = new Duel(p1,p2,this.io);
 
             this.duels.push(duel);
             duel.start();

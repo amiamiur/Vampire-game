@@ -22,7 +22,7 @@
             const towerMaterial = this.textures.loadWallMaterial();
 
             const arenaFloor = new THREE.Mesh(
-                new THREE.CircleGeometry(12, 64),
+                new THREE.PlaneGeometry(20, 20),
                 floorMaterial
             );
 
