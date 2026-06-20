@@ -1,3 +1,4 @@
+//socketHadlers
 import * as THREE from 'three';
 import { VampirePlayer } from '../classes/VampirePlayer.js';
 import { BatProjectile } from '../classes/BatProjectile.js'; // добавлен импорт
@@ -9,8 +10,10 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
         document.getElementById('status').innerText = 'Подключено';
     });
 
-    socket.on('player-connected', (playerData) => {
-        if (playerData.id !== state.mySocketId) {
+    socket.on('player-connected', (playerData)=>{
+        if(!playerData) 
+            return;
+        if(playerData.id !== state.mySocketId){
             console.log('[CLIENT] Новый игрок:', playerData.id);
             const newPlayer = new VampirePlayer(
                 playerData.id,
@@ -22,6 +25,26 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
             );
             state.players.set(playerData.id, newPlayer);
         }
+    });
+
+    socket.on('round-start', (data) => {
+        console.log('[CLIENT] Новый раунд:', data.round);
+        document.getElementById('status').innerText = `Раунд ${data.round}`;
+    });
+
+    socket.on('round-end', (data) => {
+        console.log('[CLIENT] Раунд завершён:', data);
+        document.getElementById('status').innerText = 'Раунд завершён';
+    });
+
+    socket.on('duel-start', (data) => {
+        console.log('[CLIENT] Дуэль началась:', data);
+        document.getElementById('status').innerText = `Дуэль началась`;
+    });
+
+    socket.on('duel-finished', (data) => {
+        console.log('[CLIENT] Дуэль завершена:', data);
+        document.getElementById('status').innerText = 'Дуэль завершена';
     });
 
     socket.on('player-moved', (data) => {
@@ -142,6 +165,8 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
         }
     });
 
+    
+
     socket.on('essence-update', (data) => {
         if (data.id === state.mySocketId && state.myPlayer) {
             state.myPlayer.bloodEssence = data.essence;
@@ -175,21 +200,36 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
 
     // СИНХРОНИЗАЦИЯ МЫШЕЙ ДЛЯ ДРУГИХ ИГРОКОВ
     socket.on('player-ultimate-cast', (data) => {
-    const player = state.players.get(data.id);
-    if (player && player.isAlive) {
-        // Очищаем старые снаряды
-        if (player.clearProjectiles) player.clearProjectiles();
-        
+        const player =
+            data.id === state.mySocketId
+                ? state.myPlayer
+                : state.players.get(data.id);
+
+        if (!player || !player.isAlive) return;
+
+        if (player.clearProjectiles) {
+            player.clearProjectiles();
+        }
+
         const count = data.count || 3;
         const spreadAngle = data.spreadAngle || Math.PI / 3;
-        const startPos = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
-        const forward = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
+        const startPos = new THREE.Vector3(
+            data.position.x,
+            data.position.y,
+            data.position.z
+        );
+        const forward = new THREE.Vector3(
+            data.direction.x,
+            data.direction.y,
+            data.direction.z
+        );
         const speed = data.speed || 5;
 
         const projectiles = [];
         for (let i = 0; i < count; i++) {
             const angle = -spreadAngle / 2 + (i / (count - 1)) * spreadAngle;
             const dir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+
             const bat = new BatProjectile(
                 state.scene,
                 startPos,
@@ -200,8 +240,7 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
             projectiles.push(bat);
         }
         player.shadowProjectiles = projectiles;
-    }
-});
+    });
 
     socket.on('player-died', (id) => {
         if (id === state.mySocketId) {
@@ -241,4 +280,6 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
             state.players.delete(id);
         }
     });
+
+    
 }

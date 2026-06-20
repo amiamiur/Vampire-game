@@ -1,3 +1,4 @@
+//GameLoop
 export class GameLoop {
 
     constructor({
@@ -49,15 +50,14 @@ export class GameLoop {
         this.arena.update(delta);
 
         // другие игроки
-        this.state.players.forEach(player=>{
+        this.state.players.forEach(player => {
+        if (player.update) {
+            player.update(delta);
+        }
 
-            if(player.update){
-                player.update(delta);
-            }
-
-            if(player.updateProjectiles){
-                player.updateProjectiles(delta);
-            }
+        if (player.updateProjectiles) {
+            player.updateProjectiles(delta);
+        }
         });
 
         // свой игрок
@@ -65,27 +65,19 @@ export class GameLoop {
 
         if(me){
 
-            me.update(delta);
-
-            me.updateUltimate(delta);
-
-            me.updateProjectiles(delta);
-
-            me.checkProjectileCollisions(
-                this.state.players,
-                this.socket
-            );
-
-            this.ui.updateUltimate(
-                me.ultimateCharge,
-                me.maxUltimateCharge
-            );
-
-            this.controls.target.set(
-                me.mesh.position.x,
-                me.mesh.position.y + 0.5,
-                me.mesh.position.z
-            );
+           me.update(delta); 
+           me.updateUltimate(delta); 
+           me.updateProjectiles(delta); 
+           me.checkProjectileCollisions( this.state.players, this.socket ); 
+           this.ui.updateUltimate( 
+            me.ultimateCharge, 
+            me.maxUltimateCharge ); 
+           
+            this.controls.target.set( 
+            me.mesh.position.x, 
+            me.mesh.position.y + 0.5, 
+            me.mesh.position.z );
+          
         }
 
         this.controls.update();

@@ -1,3 +1,4 @@
+//VampirePlayer
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { BatProjectile } from './BatProjectile.js';
@@ -311,6 +312,7 @@ export class VampirePlayer {
             this.mesh.rotation.y = y;
         }
     }
+    
     // --- СИСТЕМА УЛЬТЫ ---
     updateUltimate(delta) {
         if (!this.isAlive) return;
@@ -350,29 +352,20 @@ export class VampirePlayer {
         forward.normalize();
         
 
-        const projectiles = [];
-        for (let i = 0; i < count; i++) {
-            const angle = -spreadAngle/2 + (i / (count - 1)) * spreadAngle;
-            const dir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-            
-            // Создаём мышь
-            const bat = new BatProjectile(
-                this.scene,
-                startPos,
-                dir,
-                3 + Math.random() * 2,
-                '/assets/models/Bat.fbx' // путь к модели
-            );
-            projectiles.push(bat);
-        }
-        this.shadowProjectiles = projectiles;
-
-        if (socket) {
-            socket.emit('player-ultimate-cast', {
-                position: startPos,
-                direction: forward,
-                rotation: this.mesh.rotation.y
+        if(socket){
+            socket.emit('player-ultimate-cast',{
+                position:{
+                    x:startPos.x,
+                    y:startPos.y,
+                    z:startPos.z
+                },
+                direction:{
+                    x:forward.x,
+                    y:forward.y,
+                    z:forward.z
+                }
             });
+
         }
             
         

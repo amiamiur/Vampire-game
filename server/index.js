@@ -1,3 +1,4 @@
+//index
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -21,30 +22,43 @@ app.use(express.static(path.join(__dirname, '../client')));
 io.on('connection', (socket) => {
   console.log(`[SERVER] Player connected: ${socket.id}`);
 
-  const player =
-    new Player(
-    socket.id,
-    socket
+  const player = new Player(
+      socket.id,
+      socket
     );
-    game.join(player);  
-
-  socket.on(
-      "join-duel",
-      ()=>{
-
-          duelManager.join(socket);
-
+  players.set(
+      socket.id,
+      player
+  );
+  game.join(player);
+  
+  socket.broadcast.emit(
+      'player-connected',
+      {
+          id:player.id,
+          x:player.x,
+          z:player.z,
+          rotation:player.rotation,
+          hp:player.hp,
+          essence:player.essence,
+          isAlive:player.isAlive
       }
   );
-
-  socket.emit('player-hurt', { id: socket.id, hp: 100 });
-  socket.emit('essence-update', { id: socket.id, essence: 0 });
+  
+  socket.emit(
+      'current-players',
+      Array.from(players.values()).map(p=>({
+          id:p.id,
+          x:p.x,
+          z:p.z,
+          rotation:p.rotation,
+          hp:p.hp,
+          essence:p.essence,
+          isAlive:p.isAlive
+      }))
+  );
 
   console.log(`[SERVER] Total players: ${players.size}`);
-  socket.broadcast.emit('player-connected', players.get(socket.id));
-
-  socket.emit('current-players', Array.from(players.values()));
-
   socket.on('player-move', (data) => {
     const player = players.get(socket.id);
     if (player && player.isAlive) {
@@ -64,67 +78,24 @@ io.on('connection', (socket) => {
       }
   });
 
-  socket.on('player-attack', (targetId) => {
-      const attacker = players.get(socket.id);
-      const target = players.get(targetId);
-      
-      if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
-          const dx = attacker.x - target.x;
-          const dz = attacker.z - target.z;
-          const distance = Math.sqrt(dx * dx + dz * dz);
-          
-          if (distance < 2.0) {
-              const damage = 15;
-              target.hp = Math.max(0, target.hp - damage);
-              attacker.bloodEssence += 10;
-              
-              io.emit('player-hurt', { id: targetId, hp: target.hp });
-              io.emit('essence-update', { id: socket.id, essence: attacker.bloodEssence });
-              
-              // Отправляем анимацию атаки для всех
-              io.emit('player-attack-animation', { id: socket.id });
-              
-              if (target.hp <= 0) {
-                  target.isAlive=false;
-                  io.emit('player-died',targetId);
-                  duelManager.playerKilled(targetId);
-              }
-          }
-      }
-  });
+  socket.on(
+    'player-attack',(targetId)=>{
+      const duel =game.findDuel(socket.id);
 
-  socket.on('player-ultimate-hit', (data) => {
-    const attacker = players.get(socket.id);
-    const target = players.get(data.targetId);
-    if (attacker && target && attacker.id !== target.id && attacker.isAlive && target.isAlive) {
-      const damage = data.damage || 25;
-      target.hp = Math.max(0, target.hp - damage);
-      console.log(`[SERVER] Ульта от ${attacker.id} попала в ${target.id}, урон ${damage}, HP ${target.hp}`);
+    if(!duel)
+      return;
 
-      io.emit('player-hurt', { id: target.id, hp: target.hp });
+    duel.attack(socket.id,targetId);
+});
 
-      if (target.hp <= 0) {
-        target.isAlive = false;
-        io.emit('player-died', target.id);
-        setTimeout(() => {
-          if (players.has(target.id)) {
-            const respawned = players.get(target.id);
-            respawned.hp = 100;
-            respawned.x = (Math.random() - 0.5) * 16;
-            respawned.z = (Math.random() - 0.5) * 16;
-            respawned.bloodEssence = Math.max(0, respawned.bloodEssence - 20);
-            respawned.isAlive = true;
-            io.emit('player-respawn', {
-              id: target.id,
-              x: respawned.x,
-              z: respawned.z,
-              hp: respawned.hp,
-              essence: respawned.bloodEssence
-            });
-          }
-        }, 2000);
-      }
-    }
+    socket.on('player-ultimate-hit',(data)=>{
+      const duel = game.findDuel(socket.id);
+      if(!duel)
+          return;
+      console.log("[SERVER] Ultimate hit",
+          socket.id,"->",data.targetId
+      );
+      duel.attack(socket.id,data.targetId);
   });
 
   socket.on('player-ultimate-cast', (data) => {

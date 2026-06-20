@@ -1,3 +1,4 @@
+//Player
 class Player {
     constructor(id, socket){
         this.id = id;
@@ -8,13 +9,14 @@ class Player {
 
         this.x = 0;
         this.z = 0;
+        this.rotation = 0;
 
-        this.alive = true;
+        this.isAlive=true;
         this.roundKills = 0;
     }
     reset(){
         this.hp = 100;
-        this.alive = true;
+        this.isAlive = true;
 
         this.x =
         (Math.random()-0.5)*10;
@@ -26,8 +28,13 @@ class Player {
         if(this.hp <= 0){
 
             this.hp = 0;
-            this.alive = false;
+            this.isAlive = false;
         }
+    }
+
+    setPosition(x,z){
+        this.x = x;
+        this.z = z;
     }
 }
 module.exports = Player;
