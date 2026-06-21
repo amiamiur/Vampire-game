@@ -1,4 +1,3 @@
-//VampirePlayer
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { BatProjectile } from './BatProjectile.js';

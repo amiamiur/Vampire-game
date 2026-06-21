@@ -1,4 +1,3 @@
-//GameManager
 const Duel = require("./Duel.js");
 
 

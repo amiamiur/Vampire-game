@@ -1,4 +1,3 @@
-//Player
 class Player {
     constructor(id, socket){
         this.id = id;

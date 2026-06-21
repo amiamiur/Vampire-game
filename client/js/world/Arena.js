@@ -1,16 +1,16 @@
-    import * as THREE from 'three';
+import * as THREE from 'three';
 
-    export class Arena {
-        constructor(scene, textures) {
-            this.scene = scene;
-            this.textures = textures;
-            this.radius = 9;
+export class Arena {
+    constructor(scene, textures) {
+        this.scene = scene;
+        this.textures = textures;
+        this.radius = 9;
 
-            this.obstacles = [];
-            this.torches = [];
+        this.obstacles = [];
+        this.torches = [];
 
-            this.createArena();
-        }
+        this.createArena();
+    }
 
         createArena() {
             const scene = this.scene;

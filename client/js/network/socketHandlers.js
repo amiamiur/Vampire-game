@@ -1,4 +1,3 @@
-//socketHadlers
 import * as THREE from 'three';
 import { VampirePlayer } from '../classes/VampirePlayer.js';
 import { BatProjectile } from '../classes/BatProjectile.js'; // добавлен импорт

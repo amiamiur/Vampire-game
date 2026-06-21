@@ -1,4 +1,3 @@
-// Duel.js
 class Duel {
     constructor(player1, player2, io) {
         this.io = io;

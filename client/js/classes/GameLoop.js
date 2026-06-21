@@ -1,4 +1,3 @@
-//GameLoop
 export class GameLoop {
 
     constructor({
