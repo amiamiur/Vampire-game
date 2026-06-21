@@ -64,17 +64,20 @@ state.controls = controls;
 
 new Lighting(scene);
 
-
-// --- ИНИЦИАЛИЗАЦИЯ ---
+// Инициализация User interface
 const ui = new UI();
+
+//Кровавые эффекты
 const bloodParticles = new BloodParticleSystem(scene);
+
 const socket = io(window.location.origin);
 
 setupSocketHandlers(socket, state, ui, bloodParticles);
 
+// Эффекты шагов
 const footsteps = new BloodFootsteps(scene);
 
-//Управление и движение игрока
+// Управление и движение игрока
 const controller = new PlayerController({
 
     camera,
@@ -86,20 +89,12 @@ const controller = new PlayerController({
 
 });
 
-//Ультимейт на (E)
+// Ультимейт на (E)
 new InputManager(
     state.keyState,
     ()=>state.myPlayer,
     socket
 );
-
-const light = new THREE.PointLight(
-    0xaa0000,
-    1.5,
-    6
-);
-const BOUNDS = arena.getRadius();
-
 // Атака
 new CombatController({
     camera,
@@ -108,7 +103,7 @@ new CombatController({
     socket
 });
 
-//Анимация и обновление всех существующих объектов
+// Анимация и обновление всех существующих объектов
 new GameLoop({
     renderer,
     scene,
@@ -122,7 +117,7 @@ new GameLoop({
     socket
 });
 
-// --- РАЗМЕР ОКНА ---
+// Масштабирование окна
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
