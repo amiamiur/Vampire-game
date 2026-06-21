@@ -63,6 +63,16 @@ class Duel {
         if (!winner) return;
 
         this.score[winner.id]++;
+        winner.kills++;
+        winner.wins = (winner.wins || 0) + 1;
+
+        const loser = this.players.find(
+            p => p.id === deadId
+        );
+        if(loser){
+            loser.deaths++;
+            loser.losses = (loser.losses || 0) + 1;
+        }
 
         this.io.emit("round-end", {
             round: this.round,

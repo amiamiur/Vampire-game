@@ -1,17 +1,17 @@
-const { Pool } = require("pg");
+const {Pool}=require("pg");
 
 
 const pool = new Pool({
 
-    host:"localhost",
-    port:5432,
+    host:process.env.DB_HOST,
+    port:process.env.DB_PORT,
 
-    user:"postgres",
-    password:"SashaPopka200*",
+    user:process.env.DB_USER,
+    password:process.env.DB_PASSWORD,
 
-    database:"vampire_duel"
+    database:process.env.DB_NAME
 
 });
 
 
-module.exports = pool;
+module.exports=pool;

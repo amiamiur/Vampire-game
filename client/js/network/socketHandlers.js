@@ -27,6 +27,33 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
         }
     });
 
+    const leaderboard = document.getElementById("leaderboard");
+    const leaderboardBtn = document.getElementById("leaderboardBtn");
+
+    leaderboardBtn.onclick = () => {
+        if(leaderboard.style.display === "block"){
+            leaderboard.style.display = "none";
+            return;
+        }
+        leaderboard.style.display = "block";
+        socket.emit("get-leaderboard");
+    };
+    socket.on("leaderboard", (players)=>{
+        leaderboard.innerHTML = `
+            <h3>Топ игроков</h3>
+        `;
+        players.forEach((p,index)=>{
+            leaderboard.innerHTML += `
+                <div class="entry">
+                    ${index+1}. ${p.nickname}<br>
+                    🏆 Победы: ${p.wins}<br>
+                    ⚔ Убийства: ${p.kills}<br>
+                    💀 Смерти: ${p.deaths}
+                </div>
+            `;
+        });
+    });
+
     socket.on('round-start',(data)=>{
 
     console.log("Раунд",data.round);
@@ -172,8 +199,6 @@ export function setupSocketHandlers(socket, state, ui, bloodParticles) {
             }
         }
     });
-
-    
 
     socket.on('essence-update', (data) => {
         if (data.id === state.mySocketId && state.myPlayer) {

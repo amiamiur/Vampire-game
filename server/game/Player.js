@@ -15,6 +15,12 @@ class Player {
 
         this.isAlive=true;
         this.roundKills = 0;
+
+        //Для базы данных
+        this.kills = 0;
+        this.deaths = 0;
+        this.wins = 0;
+        this.losses = 0;
     }
     reset() {
         this.hp = 100;
