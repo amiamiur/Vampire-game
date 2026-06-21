@@ -1,4 +1,4 @@
-# Bloodline Duel
+🧛# Bloodline Duel🧛
 
 **Bloodline Duel** — это многопользовательская 3D-игра про дуэли вампиров в мрачной арене. Проект собран на **Three.js**, **Socket.IO**, **Node.js** и **PostgreSQL**.
 
@@ -19,7 +19,7 @@
 
 ---
 
-## Скрин проекта
+## 🩸Скрин проекта🩸
 
 <div align="center">
     <img src="coolimg.png" width="40%"/>
