@@ -3,7 +3,9 @@ class Player {
         this.id = id;
         this.socket = socket;
 
-        this.dbId=null;
+        this.dbId = null;
+        this.nickname = '';
+        this.passwordHash = '';
 
         this.hp = 100;
         this.essence = 0;
@@ -12,15 +14,19 @@ class Player {
         this.z = 0;
         this.rotation = 0;
 
-        this.isAlive=true;
+        this.isAlive = true;
         this.roundKills = 0;
 
-        //Для базы данных
+        this.inQueue = false;
+        this.inMatch = false;
+        this.authenticated = false;
+
         this.kills = 0;
         this.deaths = 0;
         this.wins = 0;
         this.losses = 0;
     }
+
     reset() {
         this.hp = 100;
         this.isAlive = true;
@@ -33,18 +39,19 @@ class Player {
             this.z = 0;
         }
     }
+
     damage(amount){
         this.hp -= amount;
         if(this.hp <= 0){
-
             this.hp = 0;
             this.isAlive = false;
         }
     }
 
-    setPosition(x,z){
+    setPosition(x, z){
         this.x = x;
         this.z = z;
     }
 }
+
 module.exports = Player;

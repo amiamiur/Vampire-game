@@ -43,40 +43,54 @@ export class GameLoop {
         );
         this.lastFrame = now;
 
-        // эффекты
         this.bloodParticles.update(delta);
         this.footsteps.update(delta);
         this.arena.update(delta);
 
-        // другие игроки
-        this.state.players.forEach(player => {
-        if (player.update) {
-            player.update(delta);
+        const battleTargets = new Map(this.state.players);
+        if(this.state.myPlayer){
+            battleTargets.set(this.state.myPlayer.id, this.state.myPlayer);
         }
 
-        if (player.updateProjectiles) {
-            player.updateProjectiles(delta);
-        }
+        this.state.players.forEach(player => {
+            if(player.update){
+                player.update(delta);
+            }
+
+            if(player.updateProjectiles){
+                player.updateProjectiles(delta);
+            }
+
+            if(player.checkProjectileCollisions){
+                player.checkProjectileCollisions(
+                    battleTargets,
+                    this.socket
+                );
+            }
         });
 
-        // свой игрок
         const me = this.state.myPlayer;
 
         if(me){
 
-           me.update(delta); 
-           me.updateUltimate(delta); 
-           me.updateProjectiles(delta); 
-           me.checkProjectileCollisions( this.state.players, this.socket ); 
-           this.ui.updateUltimate( 
-            me.ultimateCharge, 
-            me.maxUltimateCharge ); 
-           
-            this.controls.target.set( 
-            me.mesh.position.x, 
-            me.mesh.position.y + 0.5, 
-            me.mesh.position.z );
-          
+            me.update(delta);
+            me.updateUltimate(delta);
+            me.updateProjectiles(delta);
+            me.checkProjectileCollisions(
+                battleTargets,
+                this.socket
+            );
+
+            this.ui.updateUltimate(
+                me.ultimateCharge,
+                me.maxUltimateCharge
+            );
+
+            this.controls.target.set(
+                me.mesh.position.x,
+                me.mesh.position.y + 0.5,
+                me.mesh.position.z
+            );
         }
 
         this.controls.update();

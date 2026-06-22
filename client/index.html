@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blood Duel</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
+        body {
+            margin: 0;
+            overflow: hidden;
             transition: background-color 0.1s;
+            font-family: monospace;
         }
+
         #info {
             position: absolute;
             top: 20px;
@@ -24,18 +26,18 @@
         }
 
         #leaderboardBtn {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        color: #ff4444;
-        background: rgba(0, 0, 0, 0.6);
-        padding: 10px 15px;
-        font-family: monospace;
-        border: 2px solid #aa0000;
-        border-radius: 5px;
-        cursor: pointer;
-        z-index: 20;
-        transition: background-color 0.15s, color 0.15s, transform 0.15s;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ff4444;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            font-family: monospace;
+            border: 2px solid #aa0000;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 60;
+            transition: background-color 0.15s, color 0.15s, transform 0.15s;
         }
 
         #leaderboardBtn:hover {
@@ -57,7 +59,7 @@
             font-family: monospace;
             border: 2px solid #660000;
             border-radius: 8px;
-            z-index: 20;
+            z-index: 60;
             display: none;
             box-shadow: 0 0 18px rgba(120, 0, 0, 0.25);
         }
@@ -79,6 +81,103 @@
             border-bottom: none;
         }
 
+        .screen-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.78);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel {
+            width: 360px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.78);
+            border: 2px solid #aa0000;
+            border-radius: 10px;
+            color: white;
+            box-shadow: 0 0 24px rgba(120, 0, 0, 0.35);
+        }
+
+        .panel h2 {
+            margin: 0 0 12px 0;
+            color: #ff6666;
+            text-align: center;
+        }
+
+        .panel input {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #660000;
+            border-radius: 6px;
+            background: rgba(10, 0, 0, 0.85);
+            color: white;
+            outline: none;
+            font-family: monospace;
+        }
+
+        .panel button {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 12px;
+            border: 2px solid #aa0000;
+            border-radius: 6px;
+            background: rgba(50, 0, 0, 0.85);
+            color: white;
+            cursor: pointer;
+            font-family: monospace;
+        }
+
+        .panel button:hover {
+            background: rgba(100, 0, 0, 0.9);
+        }
+
+        .panel .row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .panel .row button {
+            width: 50%;
+        }
+
+        .small-text {
+            color: #ffaaaa;
+            font-size: 12px;
+            margin-top: 8px;
+            min-height: 18px;
+        }
+
+        #lobby-players {
+            margin-top: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            border-top: 1px solid rgba(170, 0, 0, 0.3);
+            padding-top: 10px;
+        }
+
+        #lobby-players .entry {
+            padding: 8px 6px;
+            border-bottom: 1px solid rgba(170, 0, 0, 0.25);
+        }
+
+        #lobby-players .entry:last-child {
+            border-bottom: none;
+        }
+
+        #menu-status,
+        #result-text,
+        #menu-player {
+            color: #ffcccc;
+            font-size: 14px;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+
         @keyframes bloodFlash {
             0% { background-color: rgba(255,0,0,0); }
             50% { background-color: rgba(255,0,0,0.5); }
@@ -88,20 +187,25 @@
 </head>
 <body>
     <div id="info">
-        BLOODLINE DUEL | <span id="status">Загрузка...</span>
+        BLOODLINE DUEL | <span id="status">Авторизация...</span>
     </div>
+
     <div id="health-bar-container" style="position: absolute; top: 80px; left: 20px; width: 200px; height: 20px; background: #330000; border: 2px solid #aa0000; border-radius: 5px; z-index: 10;">
         <div id="health-bar" style="width: 100%; height: 100%; background: #aa0000; transition: width 0.3s;"></div>
     </div>
+
     <div id="essence-display" style="position: absolute; top: 120px; left: 20px; color: #ff4444; font-family: monospace; font-size: 16px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px; z-index: 10;">
         Кровавая сущность: <span id="essence-value">0</span>
     </div>
+
     <div id="controls-hint" style="position: absolute; bottom: 20px; left: 20px; color: #888; background: rgba(0,0,0,0.5); padding: 5px 10px; font-family: monospace; font-size: 12px; z-index: 10;">
         WASD — движение | ЛКМ по другому игроку — укус (вампиризм)
     </div>
+
     <div id="ultimate-container" style="position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 200px; height: 20px; background: #1a0a0a; border: 2px solid #660000; border-radius: 10px; z-index: 10; overflow: hidden;">
-    <div id="ultimate-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #440000, #ff0000); transition: width 0.3s;"></div>
+        <div id="ultimate-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #440000, #ff0000); transition: width 0.3s;"></div>
     </div>
+
     <div id="ultimate-hint" style="position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); color: #882222; font-family: monospace; font-size: 12px; z-index: 10;">
         [E] Усиленная атака
     </div>
@@ -110,8 +214,43 @@
         Топ игроков
     </button>
 
-
     <div id="leaderboard"></div>
+
+    <div id="auth-screen" class="screen-overlay">
+        <div class="panel">
+            <h2>Bloodline Duel</h2>
+            <input id="auth-nickname" type="text" placeholder="Никнейм">
+            <input id="auth-password" type="password" placeholder="Пароль">
+            <div class="row">
+                <button id="loginBtn">Войти</button>
+                <button id="registerBtn">Регистрация</button>
+            </div>
+            <div id="auth-message" class="small-text"></div>
+        </div>
+    </div>
+
+    <div id="menu-screen" class="screen-overlay" style="display:none;">
+        <div class="panel">
+            <h2>Лобби</h2>
+            <div id="menu-player"></div>
+            <div id="menu-status">Готов к поиску матча</div>
+            <button id="findLobbyBtn">Искать лобби</button>
+            <button id="leaveLobbyBtn">Покинуть очередь</button>
+            <div id="lobby-summary"></div>
+            <div id="lobby-players"></div>
+        </div>
+    </div>
+
+    <div id="match-result-screen" class="screen-overlay" style="display:none;">
+        <div class="panel">
+            <h2 id="result-title">Матч завершён</h2>
+            <div id="result-text"></div>
+            <div class="row">
+                <button id="playAgainBtn">Играть снова</button>
+                <button id="backToMenuBtn">Выйти в меню</button>
+            </div>
+        </div>
+    </div>
 
     <script type="importmap">
         {
@@ -124,4 +263,4 @@
 
     <script type="module" src="./js/main.js"></script>
 </body>
-</html> 
+</html>
