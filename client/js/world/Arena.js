@@ -158,7 +158,7 @@ export class Arena {
         createBrokenColumn(-1,5);
         createBrokenColumn(1,-4);
         createBrokenColumn(-6,-2);
-        createBrokenColumn(-8,-1);
+        createBrokenColumn(-8,-5);
     }
 
     getObstacles(){
