@@ -105,7 +105,11 @@ class Duel {
         if (!winner || !loser)
             return;
 
+        winner.kills = (winner.kills || 0) + 1;
+
         this.score[winner.id]++;
+
+        loser.deaths = (loser.deaths || 0) + 1;
 
         this.sendToBoth("round-end", {
             round: this.round,
