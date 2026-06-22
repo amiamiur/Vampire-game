@@ -104,7 +104,7 @@ export class Arena {
         createCastleWall(0,10,0);
         createCastleWall(0,-10,0);
         createCastleWall(10,0,Math.PI/2);
-        createCastleWall(10,0,Math.PI/2);
+        createCastleWall(-10,0,Math.PI/2);
 
         // Факелы
         function createTorch(x,y,z){
